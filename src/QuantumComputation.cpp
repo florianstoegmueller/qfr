@@ -873,7 +873,7 @@ namespace qc {
 			auto tmp = dd->multiply(op->getDD(dd, line, map), e);
 			// call the dynamic reordering routine
 			// TODO: currently this performs the reordering after every operation. this may be changed
-			tmp = dd->dynamicReorder(tmp, map, strat);
+			//tmp = dd->dynamicReorder(tmp, map, strat);
 
 			dd->incRef(tmp);
 			dd->decRef(e);
@@ -881,6 +881,8 @@ namespace qc {
 
 			dd->garbageCollect();
 		}
+		// performing the reordering only once - for now
+		e = dd->dynamicReorder(e, map, strat);
 
 		// TODO: this call (probably) has to be adapted
 		// output permutation stores the expected variable mapping at the end of the computation, i.e. from which line to read which qubit
@@ -953,7 +955,7 @@ namespace qc {
 
 			// call the dynamic reordering routine
 			// TODO: currently this performs the reordering after every operation. this may be changed
-			tmp = dd->dynamicReorder(tmp, map, strat);
+			//tmp = dd->dynamicReorder(tmp, map, strat);
 
 			dd->incRef(tmp);
 			dd->decRef(e);
@@ -961,6 +963,8 @@ namespace qc {
 
 			dd->garbageCollect();
 		}
+		// performing the reordering only once - for now
+		e = dd->dynamicReorder(e, map, strat);
 
 		// TODO: this call (probably) has to be adapted
 		// output permutation stores the expected variable mapping at the end of the computation, i.e. from which line to read which qubit
