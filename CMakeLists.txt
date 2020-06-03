@@ -7,7 +7,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 
 project(qfr
-        VERSION 1.0.3
+        VERSION 1.0.5
         DESCRIPTION "QFR  - A library for the representation of quantum functionality"
         LANGUAGES CXX)
 

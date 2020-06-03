@@ -106,7 +106,7 @@ namespace qc {
 				}
 
 				// extract gate information (identifier, #controls, divisor)
-				Gate gate;
+				OpType gate;
 				if (m.str(1) == "t") { // special treatment of t(offoli) for real format
 					gate = X;
 				} else {
@@ -159,6 +159,7 @@ namespace qc {
 
 				updateMaxControls(ncontrols);
 				unsigned short target = iter->second.first;
+				unsigned short target1 = 0;
 				auto x = nearbyint(lambda);
 				switch (gate) {
 					case None:
@@ -208,11 +209,19 @@ namespace qc {
 					case P:
 					case Pdag:
 					case iSWAP:
-						unsigned short target1 = controls.back().qubit;
+						target1 = controls.back().qubit;
 						controls.pop_back();
 						emplace_back<StandardOperation>(nqubits, controls, target, target1, gate);
 						break;
-
+					case Compound:
+					case Measure:
+					case Reset:
+					case Snapshot:
+					case ShowProbabilities:
+					case Barrier:
+					case ClassicControlled:
+						std::cerr << "Operation with invalid type " << gate << " read from real file. Proceed with caution!" << std::endl;
+						break;
 				}
 			}
 		}
@@ -829,8 +838,6 @@ namespace qc {
 
 		dd->useMatrixNormalization(true);
 		dd::Edge e = createInitialMatrix(dd);
-		dd->incRef(e);
-
 		for (auto & op : ops) {
 			if (!op->isUnitary()) {
 				throw QFRException("[buildFunctionality] Functionality not unitary.");
@@ -847,7 +854,6 @@ namespace qc {
 		// correct permutation if necessary
 		changePermutation(e, map, outputPermutation, line, dd);
 		reduceAncillae(e, dd);
-		reduceGarbage(e, dd);
 
 		dd->useMatrixNormalization(false);
 		return e;
@@ -863,8 +869,6 @@ namespace qc {
 
 		dd->useMatrixNormalization(true);
 		dd::Edge e = createInitialMatrix(dd);
-		dd->incRef(e);
-
 		for (auto & op : ops) {
 			if (!op->isUnitary()) {
 				throw QFRException("[buildFunctionality] Functionality not unitary.");
@@ -877,7 +881,6 @@ namespace qc {
 			// call the dynamic reordering routine
 			// currently this performs the reordering after every operation. this may be changed
 			e = dd->dynamicReorder(tmp, map, outputPermutation, strat);
-
 			dd->garbageCollect();
 		}
 
@@ -896,7 +899,6 @@ namespace qc {
 		changePermutation(e, map, outputPermutation, line, dd);
 
 		reduceAncillae(e, dd);
-		reduceGarbage(e, dd);
 
 		dd->useMatrixNormalization(false);
 		return e;
@@ -928,7 +930,6 @@ namespace qc {
 		// correct permutation if necessary
 		changePermutation(e, map, outputPermutation, line, dd);
 		reduceAncillae(e, dd);
-		reduceGarbage(e, dd);
 
 		return e;
 	}
@@ -974,7 +975,6 @@ namespace qc {
 		changePermutation(e, map, outputPermutation, line, dd);
 
 		reduceAncillae(e, dd);
-		reduceGarbage(e, dd);
 
 		return e;
 	}
@@ -1043,7 +1043,7 @@ namespace qc {
 			unsigned short col = (j >> initialLayout.at(e.p->v)) & 1u;
 			e = e.p->e[dd::RADIX * row + col];
 			CN::mul(c, c, e.w);
-		} while (!dd->isTerminal(e));
+		} while (!dd::Package::isTerminal(e));
 		return c;
 	}
 
@@ -1510,93 +1510,6 @@ namespace qc {
 			}
 		}
 		return false;
-	}
-
-	void QuantumComputation::fuseCXtoSwap() {
-		// search for
-		//      cx a b
-		//      cx b a      (could also be mct ... b a in general)
-		//      cx a b
-		for (auto it=ops.begin(); it != ops.end(); ++it ) {
-			auto op0 = dynamic_cast<StandardOperation*>((*it).get());
-			if (op0) {
-				// search for CX a b
-				if (op0->getGate() == X &&
-				    op0->getControls().size() == 1 &&
-				    op0->getControls().at(0).type == Control::pos) {
-
-					unsigned short control = op0->getControls().at(0).qubit;
-					assert(op0->getTargets().size() == 1);
-					unsigned short target = op0->getTargets().at(0);
-
-					auto it1 = it;
-					it1++;
-					if(it1 != ops.end()) {
-						auto op1 = dynamic_cast<StandardOperation*>((*it1).get());
-						if (op1) {
-							// search for CX b a (or mct ... b a)
-							if (op1->getGate() == X &&
-							    op1->getTargets().at(0) == control &&
-							    std::any_of(op1->getControls().begin(), op1->getControls().end(), [target](qc::Control c)  -> bool {return c.qubit == target;})) {
-								assert(op1->getTargets().size() == 1);
-
-								auto it2 = it1;
-								it2++;
-								if (it2 != ops.end()) {
-									auto op2 = dynamic_cast<StandardOperation*>((*it2).get());
-									if (op2) {
-										// search for CX a b
-										if (op2->getGate() == X &&
-										    op2->getTargets().at(0) == target &&
-										    op2->getControls().size() == 1 &&
-										    op2->getControls().at(0).qubit == control) {
-
-											assert(op2->getTargets().size() == 1);
-
-											op0->setGate(SWAP);
-											op0->setTargets({target, control});
-											op0->setControls({});
-											for (const auto& c: op1->getControls()) {
-												if (c.qubit != target)
-													op0->getControls().push_back(c);
-											}
-											ops.erase(it2);
-											ops.erase(it1);
-										} else {
-											//continue;
-											// try replacing
-											//  CX a b
-											//  CX b a
-											// with
-											//  SWAP a b
-											//  CX   a b
-											// in order to enable more efficient swap reduction
-											if(op1->getControls().size() != 1) continue;
-
-											op0->setGate(SWAP);
-											op0->setTargets({target, control});
-											op0->setControls({});
-
-											op1->setTargets({target});
-											op1->setControls({Control(control)});
-										}
-									}
-								} else {
-									if(op1->getControls().size() != 1) continue;
-
-									op0->setGate(SWAP);
-									op0->setTargets({target, control});
-									op0->setControls({});
-
-									op1->setTargets({target});
-									op1->setControls({Control(control)});
-								}
-							}
-						}
-					}
-				}
-			}
-		}
 	}
 
 	unsigned short QuantumComputation::getHighestLogicalQubitIndex() {
