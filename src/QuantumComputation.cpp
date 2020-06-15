@@ -866,6 +866,7 @@ namespace qc {
 		std::array<short, MAX_QUBITS> line{};
 		line.fill(LINE_DEFAULT);
 		permutationMap map = initialLayout;
+		permutationMap varMap = initialLayout;
 
 		dd->useMatrixNormalization(true);
 		dd::Edge e = createInitialMatrix(dd);
@@ -874,14 +875,14 @@ namespace qc {
 				throw QFRException("[buildFunctionality] Functionality not unitary.");
 			}
 
-			auto tmp = dd->multiply(op->getDD(dd, line, map), e);
+			auto tmp = dd->multiply(op->getDD2(dd, line, map, varMap), e);
 
 			dd->incRef(tmp);
 			dd->decRef(e);
+
 			// call the dynamic reordering routine
 			// currently this performs the reordering after every operation. this may be changed
-			e = dd->dynamicReorder(tmp, map, outputPermutation, strat);
-			dd->garbageCollect();
+			e = dd->dynamicReorder(tmp, varMap, strat);
 		}
 
 		// TODO: this call (probably) has to be adapted
@@ -897,6 +898,7 @@ namespace qc {
 		//                                  .
 		// correct permutation if necessary
 		changePermutation(e, map, outputPermutation, line, dd);
+		outputPermutation = varMap;
 
 		reduceAncillae(e, dd);
 
@@ -940,6 +942,7 @@ namespace qc {
 		std::array<short, MAX_QUBITS> line{};
 		line.fill(LINE_DEFAULT);
 		permutationMap map = initialLayout;
+		permutationMap varMap = initialLayout;
 
 		dd::Edge e = in;
 		dd->incRef(e);
@@ -949,15 +952,13 @@ namespace qc {
 				throw QFRException("[simulate] Functionality not unitary.");
 			}
 
-			auto tmp = dd->multiply(op->getDD(dd, line, map), e);
+			auto tmp = dd->multiply(op->getDD2(dd, line, map, varMap), e);
 
 			dd->incRef(tmp);
 			dd->decRef(e);
 			// call the dynamic reordering routine
 			// currently this performs the reordering after every operation. this may be changed
-			e = dd->dynamicReorder(tmp, map, outputPermutation, strat);
-
-			dd->garbageCollect();
+			e = dd->dynamicReorder(tmp, varMap, strat);
 		}
 
 		// TODO: this call (probably) has to be adapted
@@ -973,6 +974,7 @@ namespace qc {
 		//                                  .
 		// correct permutation if necessary
 		changePermutation(e, map, outputPermutation, line, dd);
+		outputPermutation = varMap;
 
 		reduceAncillae(e, dd);
 

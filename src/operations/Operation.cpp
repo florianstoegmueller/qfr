@@ -126,6 +126,32 @@ namespace qc {
 		}
 	}
 
+	void Operation::setLine2(std::array<short, MAX_QUBITS>& line, const std::map<unsigned short, unsigned short>& permutation, const std::map<unsigned short, unsigned short>& varMap) const {
+		for(auto target: targets) {
+			#if DEBUG_MODE_OPERATIONS
+			std::cout << "target = " << target << ", varMap[perm[target]] = " << varMap.at(permutation.at(target)) << std::endl;
+			#endif
+
+			line[varMap.at(permutation.at(target))] = LINE_TARGET;
+		}
+		for(auto control: controls) {
+			#if DEBUG_MODE_OPERATIONS
+			std::cout << "control = " << control.qubit << ", varMap[perm[control]] = " << varMap.at(permutation.at(control.qubit)) << std::endl;
+			#endif
+
+			line[varMap.at(permutation.at(control.qubit))] = control.type == Control::pos? LINE_CONTROL_POS: LINE_CONTROL_NEG;
+		}
+	}
+
+	void Operation::resetLine2(std::array<short, MAX_QUBITS>& line, const std::map<unsigned short, unsigned short>& permutation, const std::map<unsigned short, unsigned short>& varMap) const {
+		for(auto target: targets) {
+			line[varMap.at(permutation.at(target))] = LINE_DEFAULT;
+		}
+		for(auto control: controls) {
+			line[varMap.at(permutation.at(control.qubit))] = LINE_DEFAULT;
+		}
+	}
+
     std::ostream& Operation::print(std::ostream& os) const {
 		return print(os, standardPermutation);
 	}

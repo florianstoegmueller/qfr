@@ -97,6 +97,7 @@ namespace qc {
 		void setup(unsigned short nq, fp par0, fp par1, fp par2);	
 		
 		dd::Edge getDD(std::unique_ptr<dd::Package>& dd, std::array<short, MAX_QUBITS>& line, bool inverse, const std::map<unsigned short, unsigned short>& permutation = standardPermutation) const;
+		dd::Edge getDD2(std::unique_ptr<dd::Package>& dd, std::array<short, MAX_QUBITS>& line, bool inverse, const std::map<unsigned short, unsigned short>& permutation = standardPermutation, const std::map<unsigned short, unsigned short>& varMap = standardPermutation) const;
 
 	public:
 		StandardOperation() = default;
@@ -132,6 +133,18 @@ namespace qc {
 		dd::Edge getPdagDD(std::unique_ptr<dd::Package>& dd, std::array<short, MAX_QUBITS>& line, const std::map<unsigned short, unsigned short>& permutation = standardPermutation) const;
 		dd::Edge getiSWAPDD(std::unique_ptr<dd::Package>& dd, std::array<short, MAX_QUBITS>& line, const std::map<unsigned short, unsigned short>& permutation = standardPermutation) const;
 		dd::Edge getiSWAPinvDD(std::unique_ptr<dd::Package>& dd, std::array<short, MAX_QUBITS>& line, const std::map<unsigned short, unsigned short>& permutation = standardPermutation) const;
+
+		dd::Edge getDD2(std::unique_ptr<dd::Package>& dd, std::array<short, MAX_QUBITS>& line) const override;
+		dd::Edge getDD2(std::unique_ptr<dd::Package>& dd, std::array<short, MAX_QUBITS>& line, std::map<unsigned short, unsigned short>& permutation, std::map<unsigned short, unsigned short>& varMap) const override;
+
+		dd::Edge getInverseDD2(std::unique_ptr<dd::Package>& dd, std::array<short, MAX_QUBITS>& line) const override;
+		dd::Edge getInverseDD2(std::unique_ptr<dd::Package>& dd, std::array<short, MAX_QUBITS>& line, std::map<unsigned short, unsigned short>& permutation, std::map<unsigned short, unsigned short>& varMap) const override;
+
+		dd::Edge getSWAPDD2(std::unique_ptr<dd::Package>& dd, std::array<short, MAX_QUBITS>& line, const std::map<unsigned short, unsigned short>& permutation = standardPermutation, const std::map<unsigned short, unsigned short>& varMap = standardPermutation) const;
+		dd::Edge getPDD2(std::unique_ptr<dd::Package>& dd, std::array<short, MAX_QUBITS>& line, const std::map<unsigned short, unsigned short>& permutation = standardPermutation, const std::map<unsigned short, unsigned short>& varMap = standardPermutation) const;
+		dd::Edge getPdagDD2(std::unique_ptr<dd::Package>& dd, std::array<short, MAX_QUBITS>& line, const std::map<unsigned short, unsigned short>& permutation = standardPermutation, const std::map<unsigned short, unsigned short>& varMap = standardPermutation) const;
+		dd::Edge getiSWAPDD2(std::unique_ptr<dd::Package>& dd, std::array<short, MAX_QUBITS>& line, const std::map<unsigned short, unsigned short>& permutation = standardPermutation, const std::map<unsigned short, unsigned short>& varMap = standardPermutation) const;
+		dd::Edge getiSWAPinvDD2(std::unique_ptr<dd::Package>& dd, std::array<short, MAX_QUBITS>& line, const std::map<unsigned short, unsigned short>& permutation = standardPermutation, const std::map<unsigned short, unsigned short>& varMap = standardPermutation) const;
 
 		void dumpOpenQASM(std::ofstream& of, const regnames_t& qreg, const regnames_t& creg) const override;
 		void dumpReal(std::ofstream& of) const override;

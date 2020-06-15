@@ -45,6 +45,23 @@ namespace qc {
 			return getInverseDD(dd, line);
 		}
 
+		dd::Edge getDD2(std::unique_ptr<dd::Package>&, std::array<short, MAX_QUBITS>&) const override {
+			std::cerr << "DD for non-unitary operation not available!" << std::endl;
+			exit(1);
+		}
+
+		dd::Edge getInverseDD2(std::unique_ptr<dd::Package>& dd, std::array<short, MAX_QUBITS>& line) const override {
+			return getDD2(dd, line);
+		}
+
+		dd::Edge getDD2(std::unique_ptr<dd::Package>& dd, std::array<short, MAX_QUBITS>& line, std::map<unsigned short, unsigned short>&, std::map<unsigned short, unsigned short>&) const override {
+			return getDD2(dd, line);
+		}
+
+		dd::Edge getInverseDD2(std::unique_ptr<dd::Package>& dd, std::array<short, MAX_QUBITS>& line, std::map<unsigned short, unsigned short>&, std::map<unsigned short, unsigned short>&) const override {
+			return getInverseDD2(dd, line);
+		}
+
 		bool isUnitary() const override {
 			return false;
 		}
