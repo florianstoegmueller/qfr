@@ -782,6 +782,38 @@ namespace qc {
 		dd->garbageCollect();
 	}
 
+	void QuantumComputation::reduceAncillae(dd::Edge& e, std::unique_ptr<dd::Package>& dd, const permutationMap& varMap) {
+		std::queue<dd::Edge> q{};
+		std::unordered_set<dd::NodePtr> nodes{};
+
+		q.emplace(e);
+		while (!q.empty()) {
+			auto edge = q.front();
+			q.pop();
+
+			// ancillary
+			if (varMap.at(e.p->v) >= nqubits) {
+				auto saved = edge;
+				edge = dd->makeNonterminal(edge.p->v, {edge.p->e[0], dd::Package::DDzero, edge.p->e[2], dd::Package::DDzero });
+				auto c = dd->cn.mulCached(edge.w, saved.w);
+				edge.w = dd->cn.lookup(c);
+				dd->cn.releaseCached(c);
+				dd->incRef(edge);
+				dd->decRef(saved);
+			}
+
+			for (int i=0; i<dd::NEDGE; ++i) {
+				if (dd->isTerminal(edge.p->e[i]))
+					continue;
+				if(nodes.insert(edge.p->e[i].p).second) {
+					q.push(edge.p->e[i]);
+				}
+			}
+		}
+
+		dd->garbageCollect();
+	}
+
 	void QuantumComputation::reduceGarbage(dd::Edge& e, std::unique_ptr<dd::Package>& dd) {
 		#if DEBUG_MODE_QC
 		std::cout << "Reducing garbage output. nqubits: " << nqubits << ", nancillae: " << nancillae << std::endl;
@@ -859,14 +891,14 @@ namespace qc {
 		return e;
 	}
 
-	dd::Edge QuantumComputation::buildFunctionality(std::unique_ptr<dd::Package>& dd, dd::DynamicReorderingStrategy strat) {
+	std::pair<dd::Edge, permutationMap> QuantumComputation::buildFunctionality(std::unique_ptr<dd::Package>& dd, dd::DynamicReorderingStrategy strat) {
 		if (nqubits + nancillae == 0)
-			return dd->DDone;
+			return {dd->DDone, permutationMap{}};
 
 		std::array<short, MAX_QUBITS> line{};
 		line.fill(LINE_DEFAULT);
 		permutationMap map = initialLayout;
-		permutationMap varMap = initialLayout;
+		permutationMap varMap = Operation::standardPermutation;
 
 		dd->useMatrixNormalization(true);
 		dd::Edge e = createInitialMatrix(dd);
@@ -885,25 +917,14 @@ namespace qc {
 			e = dd->dynamicReorder(tmp, varMap, strat);
 		}
 
-		// TODO: this call (probably) has to be adapted
-		// output permutation stores the expected variable mapping at the end of the computation, i.e. from which line to read which qubit
-		// if "map" does not match this particular variable mapping it has to be adapted (currently by applying swaps)
-		// however, especially when considering dynamic variable reordering one may want to avoid applying extra operations at the end
-		// accordingly one has to solve the following assignment correctly (possibly by changing the output permutation appropriately)
-		//  initial layout            end of circuit              output mapping
-		//      0: a           ->           0: u            ->          0:x
-		//      1: b           ->           1: v            ->          1:y
-		//      2: c           ->           2: w            ->          2:z
-		//                                  .
-		//                                  .
-		// correct permutation if necessary
+		// change the tracked qubit mapping to the expected output mapping
 		changePermutation(e, map, outputPermutation, line, dd);
-		outputPermutation = varMap;
 
-		reduceAncillae(e, dd);
+		// reduce ancillae according to variable mapping
+		reduceAncillae(e, dd, varMap);
 
 		dd->useMatrixNormalization(false);
-		return e;
+		return {e, varMap};
 	}
 
 	dd::Edge QuantumComputation::simulate(const dd::Edge& in, std::unique_ptr<dd::Package>& dd) {
@@ -937,12 +958,12 @@ namespace qc {
 	}
 
 
-	dd::Edge QuantumComputation::simulate(const dd::Edge& in, std::unique_ptr<dd::Package>& dd, dd::DynamicReorderingStrategy strat) {
+	std::pair<dd::Edge, permutationMap> QuantumComputation::simulate(const dd::Edge& in, std::unique_ptr<dd::Package>& dd, dd::DynamicReorderingStrategy strat) {
 		// measurements are currently not supported here
 		std::array<short, MAX_QUBITS> line{};
 		line.fill(LINE_DEFAULT);
 		permutationMap map = initialLayout;
-		permutationMap varMap = initialLayout;
+		permutationMap varMap = Operation::standardPermutation;
 
 		dd::Edge e = in;
 		dd->incRef(e);
@@ -961,24 +982,10 @@ namespace qc {
 			e = dd->dynamicReorder(tmp, varMap, strat);
 		}
 
-		// TODO: this call (probably) has to be adapted
-		// output permutation stores the expected variable mapping at the end of the computation, i.e. from which line to read which qubit
-		// if "map" does not match this particular variable mapping it has to be adapted (currently by applying swaps)
-		// however, especially when considering dynamic variable reordering one may want to avoid applying extra operations at the end
-		// accordingly one has to solve the following assignment correctly (possibly by changing the output permutation appropriately)
-		//  initial layout            end of circuit              output mapping
-		//      0: a           ->           0: u            ->          0:x
-		//      1: b           ->           1: v            ->          1:y
-		//      2: c           ->           2: w            ->          2:z
-		//                                  .
-		//                                  .
-		// correct permutation if necessary
+		// change the tracked qubit mapping to the expected output mapping
 		changePermutation(e, map, outputPermutation, line, dd);
-		outputPermutation = varMap;
 
-		reduceAncillae(e, dd);
-
-		return e;
+		return {e, varMap};
 	}
 
 	void QuantumComputation::create_reg_array(const registerMap& regs, regnames_t& regnames, unsigned short defaultnumber, const char* defaultname) {

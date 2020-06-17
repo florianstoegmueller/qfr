@@ -104,6 +104,7 @@ namespace qc {
 		bool isIdleQubit(unsigned short i);
 		bool isAncilla(unsigned short i);
 		void reduceAncillae(dd::Edge& e, std::unique_ptr<dd::Package>& dd);
+		void reduceAncillae(dd::Edge& e, std::unique_ptr<dd::Package>& dd, const permutationMap& varMap);
 		void reduceGarbage(dd::Edge& e, std::unique_ptr<dd::Package>& dd);
 		dd::Edge createInitialMatrix(std::unique_ptr<dd::Package>& dd); // creates identity matrix, which is reduced with respect to the ancillary qubits
 
@@ -145,10 +146,10 @@ namespace qc {
 		}
 
 		virtual dd::Edge buildFunctionality(std::unique_ptr<dd::Package>& dd);
-		virtual dd::Edge buildFunctionality(std::unique_ptr<dd::Package>& dd, dd::DynamicReorderingStrategy strat);
+		virtual std::pair<dd::Edge, permutationMap> buildFunctionality(std::unique_ptr<dd::Package>& dd, dd::DynamicReorderingStrategy strat);
 
 		virtual dd::Edge simulate(const dd::Edge& in, std::unique_ptr<dd::Package>& dd);
-		virtual dd::Edge simulate(const dd::Edge& in, std::unique_ptr<dd::Package>& dd, dd::DynamicReorderingStrategy strat);
+		virtual std::pair<dd::Edge, permutationMap> simulate(const dd::Edge& in, std::unique_ptr<dd::Package>& dd, dd::DynamicReorderingStrategy strat);
 
 		/// Obtain vector/matrix entry for row i (and column j). Does not include common factor e.w!
 		/// \param dd package to use

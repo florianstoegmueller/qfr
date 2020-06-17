@@ -118,9 +118,9 @@ namespace qc {
 				permutation.insert({i, i});
 			return permutation;
 		}
+	public:
 		static std::map<unsigned short, unsigned short> standardPermutation;
 
-	public:
 		Operation() = default;
 
 		// Virtual Destructor
@@ -219,10 +219,8 @@ namespace qc {
 		void setLine2(std::array<short, MAX_QUBITS>& line, const std::map<unsigned short, unsigned short>& permutation = standardPermutation, const std::map<unsigned short, unsigned short>& varMap = standardPermutation) const;
 		void resetLine2(std::array<short, MAX_QUBITS>& line, const std::map<unsigned short, unsigned short>& permutation = standardPermutation, const std::map<unsigned short, unsigned short>& varMap = standardPermutation) const;
 
-		virtual dd::Edge getDD2(std::unique_ptr<dd::Package>& dd, std::array<short, MAX_QUBITS>& line) const = 0;
 		virtual dd::Edge getDD2(std::unique_ptr<dd::Package>& dd, std::array<short, MAX_QUBITS>& line, std::map<unsigned short, unsigned short>& permutation, std::map<unsigned short, unsigned short>& varMap) const = 0;
 
-		virtual dd::Edge getInverseDD2(std::unique_ptr<dd::Package>& dd, std::array<short, MAX_QUBITS>& line) const = 0;
 		virtual dd::Edge getInverseDD2(std::unique_ptr<dd::Package>& dd, std::array<short, MAX_QUBITS>& line, std::map<unsigned short, unsigned short>& permutation, std::map<unsigned short, unsigned short>& varMap) const = 0;
 
 		inline virtual bool isUnitary() const { 

@@ -343,7 +343,6 @@ namespace qc {
 
 	dd::Edge StandardOperation::getPdagDD2(std::unique_ptr<dd::Package>& dd, std::array<short, MAX_QUBITS>& line, const std::map<unsigned short, unsigned short>& permutation, const std::map<unsigned short, unsigned short>& varMap) const {
 		dd::Edge e{ };
-		std::cout << "hi3" << std::endl;
 
 		line[varMap.at(permutation.at(targets[0]))] = LINE_DEFAULT;
 		e = dd->makeGateDD(Xmat, nqubits, line);
@@ -362,7 +361,6 @@ namespace qc {
     	dd::Edge e{ };
 
 		e = getSWAPDD2(dd, line, permutation, varMap);
-
 
 		line[varMap.at(permutation.at(targets[1]))] = LINE_DEFAULT;
 		e = dd->multiply(e, dd->makeGateDD(Smat, nqubits, line));
@@ -407,8 +405,7 @@ namespace qc {
 		return e;
     }
 
-	dd::Edge StandardOperation::getDD2(std::unique_ptr<dd::Package>& dd, std::array<short, MAX_QUBITS>& line, bool inverse, const std::map<unsigned short, unsigned short>& permutation, const std::map<unsigned short, unsigned short>& varMap
-	) const {
+	dd::Edge StandardOperation::getDD2(std::unique_ptr<dd::Package>& dd, std::array<short, MAX_QUBITS>& line, bool inverse, const std::map<unsigned short, unsigned short>& permutation, const std::map<unsigned short, unsigned short>& varMap) const {
 		dd::Edge e{ };
 		GateMatrix gm;
 		//TODO add assertions ?
@@ -992,21 +989,15 @@ namespace qc {
 		return e;
 	}
 
-	dd::Edge StandardOperation::getDD2(std::unique_ptr<dd::Package>& dd, std::array<short, MAX_QUBITS>& line) const {
-		setLine2(line);
-		dd::Edge e = getDD2(dd, line, false);
-		resetLine2(line);
-		return e;
-	}
-
 	dd::Edge StandardOperation::getDD2(std::unique_ptr<dd::Package>& dd, std::array<short, MAX_QUBITS>& line, std::map<unsigned short, unsigned short>& permutation, std::map<unsigned short, unsigned short>& varMap) const {
 
 		if(type == SWAP && controls.empty()) {
 			auto target0 = targets.at(0);
 			auto target1 = targets.at(1);
-			auto tmp = varMap.at(permutation.at(target0));
-			varMap.at(permutation.at(target0)) = varMap.at(permutation.at(target1));
-			varMap.at(permutation.at(target1)) = tmp;
+			// update permutation
+			auto tmp = permutation.at(target0);
+			permutation.at(target0) = permutation.at(target1);
+			permutation.at(target1) = tmp;
 			return dd->makeIdent(0, short(nqubits-1));
 		}
 
@@ -1016,22 +1007,15 @@ namespace qc {
 		return e;
 	}
 
-	dd::Edge StandardOperation::getInverseDD2(std::unique_ptr<dd::Package>& dd, std::array<short, MAX_QUBITS>& line) const {
-		setLine2(line);
-		dd::Edge e = getDD2(dd, line, true);
-		resetLine2(line);
-		return e;
-	}
-
 	dd::Edge StandardOperation::getInverseDD2(std::unique_ptr<dd::Package>& dd, std::array<short, MAX_QUBITS>& line, std::map<unsigned short, unsigned short>& permutation, std::map<unsigned short, unsigned short>& varMap) const {
 
 		if(type == SWAP && controls.empty()) {
 			auto target0 = targets.at(0);
 			auto target1 = targets.at(1);
 			// update permutation
-			auto tmp = varMap.at(permutation.at(target0));
-			varMap.at(permutation.at(target0)) = varMap.at(permutation.at(target1));
-			varMap.at(permutation.at(target1)) = tmp;
+			auto tmp = permutation.at(target0);
+			permutation.at(target0) = permutation.at(target1);
+			permutation.at(target1) = tmp;
 			return dd->makeIdent(0, short(nqubits-1));
 		}
 
