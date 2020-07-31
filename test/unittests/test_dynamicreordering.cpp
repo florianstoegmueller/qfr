@@ -140,7 +140,7 @@ TEST_F(DynamicReorderingTest, mct_sifting_large) {
 	EXPECT_EQ(dd->size(e), 32);
 }
 
-INSTANTIATE_TEST_SUITE_P(SomeCircuits, DynamicReorderingTestVisualisation, testing::Values("bell", "grover", "test2", "test3", "test4"),
+INSTANTIATE_TEST_SUITE_P(SomeCircuits, DynamicReorderingTestVisualisation, testing::Values("bell", "grover", "test2", "test3", "test4", "test5"),
 		[](const testing::TestParamInfo<DynamicReorderingTestVisualisation::ParamType>& info) {
 			auto s = info.param;
 			std::replace( s.begin(), s.end(), '.', '_');
