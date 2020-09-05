@@ -32,7 +32,15 @@ namespace qc {
 		dd::Edge getInverseDD(std::unique_ptr<dd::Package>& dd, std::array<short, MAX_QUBITS>& line) const override;
 		dd::Edge getDD(std::unique_ptr<dd::Package>& dd, std::array<short, MAX_QUBITS>& line, std::map<unsigned short, unsigned short>&) const override;
 		dd::Edge getInverseDD(std::unique_ptr<dd::Package>& dd, std::array<short, MAX_QUBITS>& line, std::map<unsigned short, unsigned short>&) const override {
-			return getInverseDD(dd, line);
+			return getDD(dd, line);
+		}
+
+		dd::Edge getDD2(std::unique_ptr<dd::Package>& dd, std::array<short, MAX_QUBITS>& line, std::map<unsigned short, unsigned short>&, std::map<unsigned short, unsigned short>&) const override {
+			return getDD(dd, line);
+		}
+
+		dd::Edge getInverseDD2(std::unique_ptr<dd::Package>& dd, std::array<short, MAX_QUBITS>& line, std::map<unsigned short, unsigned short>&, std::map<unsigned short, unsigned short>&) const override {
+			return getDD(dd, line);
 		}
 
 		bool isUnitary() const override {

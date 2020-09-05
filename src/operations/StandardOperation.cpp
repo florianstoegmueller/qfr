@@ -313,6 +313,162 @@ namespace qc {
 		}
     }
 
+	dd::Edge StandardOperation::getSWAPDD2(std::unique_ptr<dd::Package>& dd, std::array<short, MAX_QUBITS>& line, const std::map<unsigned short, unsigned short>& permutation, const std::map<unsigned short, unsigned short>& varMap) const {
+		dd::Edge e{ };
+
+		line[varMap.at(permutation.at(targets[0]))] = LINE_CONTROL_POS;
+		e = dd->makeGateDD(Xmat, nqubits, line);
+
+		line[varMap.at(permutation.at(targets[0]))] = LINE_TARGET;
+		line[varMap.at(permutation.at(targets[1]))] = LINE_CONTROL_POS;
+		e = dd->multiply(e, dd->multiply(dd->makeGateDD(Xmat, nqubits, line), e));
+
+		line[varMap.at(permutation.at(targets[1]))] = LINE_TARGET;
+		return e;
+    }
+
+	dd::Edge StandardOperation::getPDD2(std::unique_ptr<dd::Package>& dd, std::array<short, MAX_QUBITS>& line, const std::map<unsigned short, unsigned short>& permutation, const std::map<unsigned short, unsigned short>& varMap) const {
+		dd::Edge e{ };
+
+		line[varMap.at(permutation.at(targets[1]))] = LINE_CONTROL_POS;
+		e = dd->makeGateDD(Xmat, nqubits, line);
+
+		line[varMap.at(permutation.at(targets[0]))] = LINE_DEFAULT;
+		line[varMap.at(permutation.at(targets[1]))] = LINE_TARGET;
+		e = dd->multiply(dd->makeGateDD(Xmat, nqubits, line), e);
+
+		line[varMap.at(permutation.at(targets[0]))] = LINE_TARGET;
+		return e;
+	}
+
+	dd::Edge StandardOperation::getPdagDD2(std::unique_ptr<dd::Package>& dd, std::array<short, MAX_QUBITS>& line, const std::map<unsigned short, unsigned short>& permutation, const std::map<unsigned short, unsigned short>& varMap) const {
+		dd::Edge e{ };
+
+		line[varMap.at(permutation.at(targets[0]))] = LINE_DEFAULT;
+		e = dd->makeGateDD(Xmat, nqubits, line);
+
+		line[varMap.at(permutation.at(targets[0]))] = LINE_TARGET;
+		line[varMap.at(permutation.at(targets[1]))] = LINE_CONTROL_POS;
+		e = dd->multiply(dd->makeGateDD(Xmat, nqubits, line), e);
+
+		line[varMap.at(permutation.at(targets[1]))] = LINE_TARGET;
+		return e;
+    }
+
+	dd::Edge StandardOperation::getiSWAPDD2(std::unique_ptr<dd::Package>& dd, std::array<short, MAX_QUBITS>& line, const std::map<unsigned short, unsigned short>& permutation, const std::map<unsigned short, unsigned short>& varMap) const {
+		// TODO: this can be simplified since H-CX-H == CZ
+
+    	dd::Edge e{ };
+
+		e = getSWAPDD2(dd, line, permutation, varMap);
+
+		line[varMap.at(permutation.at(targets[1]))] = LINE_DEFAULT;
+		e = dd->multiply(e, dd->makeGateDD(Smat, nqubits, line));
+
+		line[varMap.at(permutation.at(targets[0]))] = LINE_DEFAULT;
+		line[varMap.at(permutation.at(targets[1]))] = LINE_TARGET;
+		e = dd->multiply(e, dd->makeGateDD(Smat, nqubits, line));
+		e = dd->multiply(e, dd->makeGateDD(Hmat, nqubits, line));
+
+		line[varMap.at(permutation.at(targets[0]))] = LINE_CONTROL_POS;
+		e = dd->multiply(e, dd->makeGateDD(Xmat, nqubits, line));
+
+		line[varMap.at(permutation.at(targets[0]))] = LINE_DEFAULT;
+		e = dd->multiply(e, dd->makeGateDD(Hmat, nqubits, line));
+
+		line[varMap.at(permutation.at(targets[0]))] = LINE_TARGET;
+		return e;
+    }
+
+	dd::Edge StandardOperation::getiSWAPinvDD2(std::unique_ptr<dd::Package>& dd, std::array<short, MAX_QUBITS>& line, const std::map<unsigned short, unsigned short>& permutation, const std::map<unsigned short, unsigned short>& varMap) const {
+		// TODO: this can be simplified since H-CX-H == CZ
+
+		dd::Edge e{ };
+
+		line[varMap.at(permutation.at(targets[0]))] = LINE_DEFAULT;
+		e = dd->makeGateDD(Hmat, nqubits, line);
+
+		line[varMap.at(permutation.at(targets[0]))] = LINE_CONTROL_POS;
+		e = dd->multiply(e, dd->makeGateDD(Xmat, nqubits, line));
+
+		line[varMap.at(permutation.at(targets[0]))] = LINE_DEFAULT;
+		e = dd->multiply(e, dd->makeGateDD(Hmat, nqubits, line));
+		e = dd->multiply(e, dd->makeGateDD(Sdagmat, nqubits, line));
+
+		line[varMap.at(permutation.at(targets[0]))] = LINE_TARGET;
+		line[varMap.at(permutation.at(targets[1]))] = LINE_DEFAULT;
+		e = dd->multiply(e, dd->makeGateDD(Sdagmat, nqubits, line));
+
+		line[varMap.at(permutation.at(targets[1]))] = LINE_TARGET;
+		e = dd->multiply(e, getSWAPDD(dd, line, permutation));
+
+		return e;
+    }
+
+	dd::Edge StandardOperation::getDD2(std::unique_ptr<dd::Package>& dd, std::array<short, MAX_QUBITS>& line, bool inverse, const std::map<unsigned short, unsigned short>& permutation, const std::map<unsigned short, unsigned short>& varMap) const {
+		dd::Edge e{ };
+		GateMatrix gm;
+		//TODO add assertions ?
+		switch (type) {
+			case I:	gm = Imat; break;
+			case H: gm = Hmat; break;
+			case X:
+				if (controls.size() > 1) { //Toffoli //TODO > 0 (include CNOT?)
+					e = dd->TTlookup(nqubits, static_cast<unsigned short>(controls.size()), targets[0], line.data());
+					if (e.p == nullptr) {
+						e = dd->makeGateDD(Xmat, nqubits, line);
+						dd->TTinsert(nqubits, static_cast<unsigned short>(controls.size()), targets[0], line.data(), e);
+					}
+					return e;
+				}
+				gm = Xmat;
+				break;
+			case Y:    gm = Ymat; break;
+			case Z:    gm = Zmat; break;
+			case S:    gm = inverse? Sdagmat: Smat; break;
+			case Sdag: gm = inverse? Smat: Sdagmat; break;
+			case T:    gm = inverse? Tdagmat: Tmat; break;
+			case Tdag: gm = inverse? Tmat: Tdagmat; break;
+			case V:    gm = inverse? Vdagmat: Vmat; break;
+			case Vdag: gm = inverse? Vmat: Vdagmat; break;
+			case U3:   gm = inverse? U3mat(-parameter[1], -parameter[0], -parameter[2]): U3mat(parameter[0], parameter[1], parameter[2]); break;
+			case U2:   gm = inverse? U2mat(-parameter[1]+PI, -parameter[0]-PI): U2mat(parameter[0], parameter[1]); break;
+			case U1:   gm = inverse? RZmat(-parameter[0]): RZmat(parameter[0]); break;
+			case RX:   gm = inverse? RXmat(-parameter[0]): RXmat(parameter[0]); break;
+			case RY:   gm = inverse? RYmat(-parameter[0]): RYmat(parameter[0]); break;
+			case RZ:   gm = inverse? RZmat(-parameter[0]): RZmat(parameter[0]); break;
+			case SWAP:
+				return getSWAPDD2(dd, line, permutation, varMap);
+			case iSWAP:
+				if(inverse) {
+					return getiSWAPinvDD2(dd, line, permutation, varMap);
+				} else {
+					return getiSWAPDD2(dd, line, permutation, varMap);
+				}
+			case P:
+				if (inverse) {
+					return getPdagDD2(dd, line, permutation, varMap);
+				} else {
+					return getPDD2(dd, line, permutation, varMap);
+				}
+			case Pdag:
+				if (inverse) {
+					return getPDD2(dd, line, permutation, varMap);
+				} else {
+					return getPdagDD2(dd, line, permutation, varMap);
+				}
+			default:
+				std::cerr << "DD for gate" << name << " not available!" << std::endl;
+				exit(1);
+		}
+		if (multiTarget && !controlled) {
+			std::cerr << "Multi target gates not implemented yet!" << std::endl;
+			exit(1);
+		} else {
+			return dd->makeGateDD(gm, nqubits, line);
+		}
+    }
+
     /***
      * Constructors
      ***/
@@ -845,6 +1001,42 @@ namespace qc {
 		setLine(line, permutation);
 		dd::Edge e = getDD(dd, line, true, permutation);
 		resetLine(line, permutation);
+		return e;
+	}
+
+	dd::Edge StandardOperation::getDD2(std::unique_ptr<dd::Package>& dd, std::array<short, MAX_QUBITS>& line, std::map<unsigned short, unsigned short>& permutation, std::map<unsigned short, unsigned short>& varMap) const {
+
+		if(type == SWAP && controls.empty()) {
+			auto target0 = targets.at(0);
+			auto target1 = targets.at(1);
+			// update permutation
+			auto tmp = permutation.at(target0);
+			permutation.at(target0) = permutation.at(target1);
+			permutation.at(target1) = tmp;
+			return dd->makeIdent(0, short(nqubits-1));
+		}
+
+		setLine2(line, permutation, varMap);
+		dd::Edge e = getDD2(dd, line, false, permutation, varMap);
+		resetLine2(line, permutation, varMap);
+		return e;
+	}
+
+	dd::Edge StandardOperation::getInverseDD2(std::unique_ptr<dd::Package>& dd, std::array<short, MAX_QUBITS>& line, std::map<unsigned short, unsigned short>& permutation, std::map<unsigned short, unsigned short>& varMap) const {
+
+		if(type == SWAP && controls.empty()) {
+			auto target0 = targets.at(0);
+			auto target1 = targets.at(1);
+			// update permutation
+			auto tmp = permutation.at(target0);
+			permutation.at(target0) = permutation.at(target1);
+			permutation.at(target1) = tmp;
+			return dd->makeIdent(0, short(nqubits-1));
+		}
+
+		setLine2(line, permutation, varMap);
+		dd::Edge e = getDD2(dd, line, true, permutation, varMap);
+		resetLine2(line, permutation, varMap);
 		return e;
 	}
 }

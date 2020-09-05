@@ -83,6 +83,22 @@ namespace qc {
 			return e;
 		}
 
+		dd::Edge getDD2(std::unique_ptr<dd::Package>& dd, std::array<short, MAX_QUBITS>& line, std::map<unsigned short, unsigned short>& permutation, std::map<unsigned short, unsigned short>& varMap) const override {
+			dd::Edge e = dd->makeIdent(0, short(nqubits - 1));
+			for (auto& op: ops) {
+				e = dd->multiply(op->getDD2(dd, line, permutation, varMap), e);
+			}
+			return e;
+		}
+
+		dd::Edge getInverseDD2(std::unique_ptr<dd::Package>& dd, std::array<short, MAX_QUBITS>& line, std::map<unsigned short, unsigned short>& permutation, std::map<unsigned short, unsigned short>& varMap) const override {
+			dd::Edge e = dd->makeIdent(0, short(nqubits - 1));
+			for (auto& op: ops) {
+				e = dd->multiply(e, op->getInverseDD2(dd, line, permutation, varMap));
+			}
+			return e;
+		}
+
 		std::ostream& print(std::ostream& os) const override {
 			return print(os, standardPermutation);
 		}

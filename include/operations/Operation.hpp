@@ -129,9 +129,9 @@ namespace qc {
 				permutation.insert({i, i});
 			return permutation;
 		}
+	public:
 		static std::map<unsigned short, unsigned short> standardPermutation;
 
-	public:
 		Operation() = default;
 		Operation(const Operation& op) = delete;
 		Operation(Operation&& op) noexcept = default;
@@ -229,6 +229,13 @@ namespace qc {
 
 		virtual dd::Edge getInverseDD(std::unique_ptr<dd::Package>& dd, std::array<short, MAX_QUBITS>& line) const = 0;
 		virtual dd::Edge getInverseDD(std::unique_ptr<dd::Package>& dd, std::array<short, MAX_QUBITS>& line, std::map<unsigned short, unsigned short>& permutation) const = 0;
+
+		void setLine2(std::array<short, MAX_QUBITS>& line, const std::map<unsigned short, unsigned short>& permutation = standardPermutation, const std::map<unsigned short, unsigned short>& varMap = standardPermutation) const;
+		void resetLine2(std::array<short, MAX_QUBITS>& line, const std::map<unsigned short, unsigned short>& permutation = standardPermutation, const std::map<unsigned short, unsigned short>& varMap = standardPermutation) const;
+
+		virtual dd::Edge getDD2(std::unique_ptr<dd::Package>& dd, std::array<short, MAX_QUBITS>& line, std::map<unsigned short, unsigned short>& permutation, std::map<unsigned short, unsigned short>& varMap) const = 0;
+
+		virtual dd::Edge getInverseDD2(std::unique_ptr<dd::Package>& dd, std::array<short, MAX_QUBITS>& line, std::map<unsigned short, unsigned short>& permutation, std::map<unsigned short, unsigned short>& varMap) const = 0;
 
 		inline virtual bool isUnitary() const { 
 			return true; 
