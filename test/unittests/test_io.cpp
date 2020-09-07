@@ -89,9 +89,17 @@ TEST_F(IO, importFromString) {
 }
 
 TEST_F(IO, controlled_op_acting_on_whole_register) {
-	std::string circuit_qasm = "OPENQASM 2.0;\ninclude \"qelib1.inc\";\nqreg q[3];\nccx q,q[1];\n";
+	std::string circuit_qasm = "OPENQASM 2.0;\ninclude \"qelib1.inc\";\nqreg q[2];\ncx q,q[1];\n";
 	std::stringstream ss{circuit_qasm};
-	EXPECT_THROW(qc->import(ss, qc::OpenQASM), qasm::QASMParserException);
+	try {
+		qc->import(ss, qc::OpenQASM);
+		FAIL() << "Nothing thrown. Expected qasm::QASMParserException";
+	} catch (qasm::QASMParserException const & err) {
+		std::cout << err.what() << std::endl;
+		SUCCEED();
+	} catch (...) {
+		FAIL() << "Expected qasm::QASMParserException";
+	}
 }
 
 TEST_F(IO, invalid_real_header) {
@@ -104,4 +112,83 @@ TEST_F(IO, invalid_real_command) {
 	std::string circuit_real = ".numvars 2\n.var q0 q1\n.begin\nh1 q0\n# test comment\nt2 q0 q1\n.end\n";
 	std::stringstream ss{circuit_real};
 	EXPECT_THROW(qc->import(ss, qc::Real), qc::QFRException);
+}
+
+TEST_F(IO, insufficient_registers_qelib) {
+	std::string circuit_qasm = "OPENQASM 2.0;\ninclude \"qelib1.inc\";\nqreg q[2];\ncx q[0];\n";
+	std::stringstream ss{circuit_qasm};
+	try {
+		qc->import(ss, qc::OpenQASM);
+		FAIL() << "Nothing thrown. Expected qasm::QASMParserException";
+	} catch (qasm::QASMParserException const & err) {
+		std::cout << err.what() << std::endl;
+		SUCCEED();
+	} catch (...) {
+		FAIL() << "Expected qasm::QASMParserException";
+	}
+}
+
+TEST_F(IO, insufficient_registers_enhanced_qelib) {
+	std::string circuit_qasm = "OPENQASM 2.0;\ninclude \"qelib1.inc\";\nqreg q[4];\ncccz q[0], q[1], q[2];\n";
+	std::stringstream ss{circuit_qasm};
+	try {
+		qc->import(ss, qc::OpenQASM);
+		FAIL() << "Nothing thrown. Expected qasm::QASMParserException";
+	} catch (qasm::QASMParserException const & err) {
+		std::cout << err.what() << std::endl;
+		SUCCEED();
+	} catch (...) {
+		FAIL() << "Expected qasm::QASMParserException";
+	}
+}
+
+TEST_F(IO, superfluous_registers_qelib) {
+	std::string circuit_qasm = "OPENQASM 2.0;\ninclude \"qelib1.inc\";\nqreg q[3];\ncx q[0], q[1], q[2];\n";
+	std::stringstream ss{circuit_qasm};
+	try {
+		qc->import(ss, qc::OpenQASM);
+		FAIL() << "Nothing thrown. Expected qasm::QASMParserException";
+	} catch (qasm::QASMParserException const & err) {
+		std::cout << err.what() << std::endl;
+		SUCCEED();
+	} catch (...) {
+		FAIL() << "Expected qasm::QASMParserException";
+	}
+}
+
+TEST_F(IO, superfluous_registers_enhanced_qelib) {
+	std::string circuit_qasm = "OPENQASM 2.0;\ninclude \"qelib1.inc\";\nqreg q[5];\ncccz q[0], q[1], q[2], q[3], q[4];\n";
+	std::stringstream ss{circuit_qasm};
+	try {
+		qc->import(ss, qc::OpenQASM);
+		FAIL() << "Nothing thrown. Expected qasm::QASMParserException";
+	} catch (qasm::QASMParserException const & err) {
+		std::cout << err.what() << std::endl;
+		SUCCEED();
+	} catch (...) {
+		FAIL() << "Expected qasm::QASMParserException";
+	}
+}
+
+TEST_F(IO, dump_negative_control) {
+	std::string circuit_real = ".numvars 2\n.variables a b\n.begin\nt2 -a b\n.end";
+	std::stringstream ss{circuit_real};
+	qc->import(ss, qc::Real);
+	qc->dump("testdump.qasm");
+	qc->import("testdump.qasm");
+	ASSERT_EQ(qc->getNops(), 3);
+	auto it = qc->begin();
+	EXPECT_EQ((*it)->getType(), qc::X);
+	EXPECT_EQ((*it)->getControls().size(), 0);
+	++it;
+	EXPECT_EQ((*it)->getType(), qc::X);
+	EXPECT_EQ((*it)->getControls().size(), 1);
+	++it;
+	EXPECT_EQ((*it)->getType(), qc::X);
+	EXPECT_EQ((*it)->getControls().size(), 0);
+}
+
+TEST_F(IO, tfc_input) {
+	qc->import("./circuits/test.tfc");
+	std::cout << *qc << std::endl;
 }

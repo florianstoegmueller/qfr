@@ -22,17 +22,19 @@
 namespace qasm {
 	static constexpr long double PI = 3.14159265358979323846264338327950288419716939937510L;
 
-	using registerMap = std::map<std::string, std::pair<unsigned short, unsigned short>>;
+	using registerMap = std::map<std::string, std::pair<unsigned short, unsigned short>, std::greater<>>;
 
-	class QASMParserException : public std::runtime_error {
+	class QASMParserException : public std::invalid_argument {
 		std::string msg;
 	public:
-		explicit QASMParserException(std::string  msg) : std::runtime_error("QASM Parser Exception"), msg(std::move(msg)) { }
-
-		const char *what() const noexcept override {
+		explicit QASMParserException(const std::string& msg) : std::invalid_argument("QASM Parser Exception") {
 			std::stringstream ss{};
 			ss << "[qasm parser] " << msg;
-			return ss.str().c_str();
+			this->msg = ss.str();
+		}
+
+		const char *what() const noexcept override {
+			return msg.c_str();
 		}
 	};
 
@@ -81,11 +83,34 @@ namespace qasm {
 			}
 		};
 
+		struct CUgate : public BasisGate {
+			Expr *theta = nullptr;
+			Expr *phi = nullptr;
+			Expr *lambda = nullptr;
+			std::vector<std::string> controls;
+			std::string target;
+
+			CUgate(Expr *theta, Expr *phi, Expr *lambda, std::vector<std::string> controls, std::string  target) : theta(theta), phi(phi), lambda(lambda), controls(std::move(controls)), target(std::move(target)) { }
+
+			~CUgate() override {
+				delete theta;
+				delete phi;
+				delete lambda;
+			}
+		};
+
 		struct CXgate : public BasisGate {
 			std::string control;
 			std::string target;
 
 			CXgate(std::string  control, std::string  target) : control(std::move(control)), target(std::move(target)) { }
+		};
+
+		struct MCXgate : public BasisGate {
+			std::vector<std::string> controls;
+			std::string target;
+
+			MCXgate(std::vector<std::string> controls, std::string target) : controls(std::move(controls)), target(std::move(target)) { }
 		};
 		
 		struct CompoundGate {
@@ -147,8 +172,10 @@ namespace qasm {
 
 		std::unique_ptr<qc::Operation> Qop();
 
-		static void error [[ noreturn ]](const std::string& msg) {
-			throw QASMParserException(msg);
+		void error [[ noreturn ]](const std::string& msg) const {
+			std::ostringstream oss{};
+			oss << "l:" << t.line << " c:" << t.col << " msg: " << msg;
+			throw QASMParserException(oss.str());
 		}
 	};
 

@@ -13,15 +13,19 @@ namespace qc {
 	class ClassicControlledOperation : public Operation {
 	protected:
 		std::unique_ptr<Operation> op;
-		short control;
+		std::pair<unsigned short, unsigned short> controlRegister{};
+		unsigned int expectedValue = 1u;
 	public:
 
-		ClassicControlledOperation(std::unique_ptr<Operation>& op, short control) : op(std::move(op)), control(control) {
+		// Applies operation `_op` if the creg starting at index `control` has the expected value
+		ClassicControlledOperation(std::unique_ptr<Operation>& _op, std::pair<unsigned short, unsigned short>& controlRegister, unsigned int expectedValue = 1u) : op(std::move(_op)), controlRegister(controlRegister), expectedValue(expectedValue) {
 			nqubits = op->getNqubits();
 			name[0] = 'c';
 			name[1] = '_';
 			std::strcpy(name + 2, op->getName());
-			parameter[0] = control;
+			parameter[0] = controlRegister.first;
+			parameter[1] = controlRegister.second;
+			parameter[2] = expectedValue;
 			type = ClassicControlled;
 		}
 
@@ -41,6 +45,18 @@ namespace qc {
 			return op->getInverseDD(dd, line, permutation);
 		}
 
+		auto getControlRegister() const {
+			return controlRegister;
+		}
+
+		auto getExpectedValue() const {
+			return expectedValue;
+		}
+
+		auto getOperation() const {
+			return op.get();
+		}
+
 		dd::Edge getDD2(std::unique_ptr<dd::Package>& dd, std::array<short, MAX_QUBITS>& line, std::map<unsigned short, unsigned short>& permutation, std::map<unsigned short, unsigned short>& varMap) const override {
 			return op->getDD2(dd, line, permutation, varMap);
 		}
@@ -57,27 +73,24 @@ namespace qc {
 			return true;
 		}
 
-		void dumpOpenQASM(std::ofstream& of, const regnames_t& qreg, const regnames_t& creg) const override {
+		void dumpOpenQASM(std::ostream& of, const regnames_t& qreg, const regnames_t& creg) const override {
 			UNUSED(of)
 			UNUSED(qreg)
 			UNUSED(creg)
-			std::cerr << "Dumping of classically controlled gates currently not supported for qasm" << std::endl;
-			exit(1);
+			throw QFRException("Dumping of classically controlled gates currently not supported for qasm");
 		}
 
-		void dumpReal(std::ofstream& of) const override {
+		void dumpReal(std::ostream& of) const override {
 			UNUSED(of)
-			std::cerr << "Dumping of classically controlled gates not possible in real format" << std::endl;
-			exit(1);
+			throw QFRException("Dumping of classically controlled gates not possible in real format");
 		}
 
-		void dumpQiskit(std::ofstream& of, const regnames_t& qreg, const regnames_t& creg, const char *anc_reg_name) const override {
+		void dumpQiskit(std::ostream& of, const regnames_t& qreg, const regnames_t& creg, const char *anc_reg_name) const override {
 			UNUSED(of)
 			UNUSED(qreg)
 			UNUSED(creg)
 			UNUSED(anc_reg_name)
-			std::cerr << "Dumping of classically controlled gates currently not supported for qiskit" << std::endl;
-			exit(1);
+			throw QFRException("Dumping of classically controlled gates currently not supported for qiskit");
 		}
 	};
 }

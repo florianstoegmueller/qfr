@@ -302,12 +302,12 @@ namespace qc {
 					return getPdagDD(dd, line, permutation);
 				}
 			default:
-				std::cerr << "DD for gate" << name << " not available!" << std::endl;
-				exit(1);
+				std::ostringstream oss{};
+				oss << "DD for gate" << name << " not available!";
+				throw QFRException(oss.str());
 		}
 		if (multiTarget && !controlled) {
-			std::cerr << "Multi target gates not implemented yet!" << std::endl;
-			exit(1);
+			throw QFRException("Multi target gates not implemented yet!");
 		} else {
 			return dd->makeGateDD(gm, nqubits, line);
 		}
@@ -530,8 +530,8 @@ namespace qc {
 
 	/***
      * Public Methods
-    ***/	
-	void StandardOperation::dumpOpenQASM(std::ofstream& of, const regnames_t& qreg, const regnames_t&) const {
+    ***/
+	void StandardOperation::dumpOpenQASM(std::ostream& of, const regnames_t& qreg, const regnames_t& creg) const {
 		std::ostringstream op;
 		op << std::setprecision(std::numeric_limits<fp>::digits10);
 		if((controls.size() > 1 && type != X) || controls.size() > 2) {
@@ -540,22 +540,20 @@ namespace qc {
 			<< "Thus, while not valid vanilla OpenQASM, the dumped file will work with this library. " << std::endl;
 		}
 
-		for (const auto& c: controls) {
-			of << "c";
-		}
+		op << std::string(controls.size(), 'c');
 
 		switch (type) {
 			case I: 
                	op << "id";
 				break;
 			case H:
-				of << "h";
+				op << "h";
 				break;
 			case X:
-				of << "x";
+				op << "x";
 				break;
 			case Y:
-				of << "y";
+				op << "y";
 				break;
 			case Z:
 				op << "z";
@@ -613,67 +611,80 @@ namespace qc {
 				op << "rz(" << parameter[0] << ")";
 				break;
 			case SWAP:
-				of << "swap";
-				for (const auto& c: controls)
-					of << " " << qreg[c.qubit].second << ",";
-				of << " " << qreg[targets[0]].second << ", " << qreg[targets[1]].second << ";" << std::endl;
-				return;
-			case iSWAP:
-				of << "swap";
+				for (const auto& c: controls) {
+					if (c.type == Control::neg)
+						of << "x " << qreg[c.qubit].second << ";" << std::endl;
+				}
+
+				of << op.str() <<  "swap";
 				for (const auto& c: controls)
 					of << " " << qreg[c.qubit].second << ",";
 				of << " " << qreg[targets[0]].second << ", " << qreg[targets[1]].second << ";" << std::endl;
 
+				for (const auto& c: controls) {
+					if (c.type == Control::neg)
+						of << "x " << qreg[c.qubit].second << ";" << std::endl;
+				}
+				return;
+			case iSWAP:
+				for (const auto& c: controls) {
+					if (c.type == Control::neg)
+						of << "x " << qreg[c.qubit].second << ";" << std::endl;
+				}
+				of << op.str() << "swap";
 				for (const auto& c: controls)
-					of << "c";
-				of << "s";
+					of << " " << qreg[c.qubit].second << ",";
+				of << " " << qreg[targets[0]].second << ", " << qreg[targets[1]].second << ";" << std::endl;
+
+				of << op.str() << "s";
 				for (const auto& c: controls)
 					of << " " << qreg[c.qubit].second << ",";
 				of << " " << qreg[targets[0]].second << ";"  << std::endl;
 
-
-				for (const auto& c: controls)
-					of << "c";
-				of << "s";
+				of << op.str() << "s";
 				for (const auto& c: controls)
 					of << " " << qreg[c.qubit].second << ",";
 				of << " " << qreg[targets[1]].second << ";"  << std::endl;
 
-				for (const auto& c: controls)
-					of << "c";
-                of << "cz";
+                of << op.str() << "cz";
 				for (const auto& c: controls)
 					of << " " << qreg[c.qubit].second << ",";
                 of << qreg[targets[0]].second << ", " << qreg[targets[1]].second << ";" << std::endl;
-				return;
-			case P: 
-                of << "ccx";
-				for (const auto& c: controls)
-					of << " " << qreg[c.qubit].second << ",";
-                of << " " << qreg[controls[0].qubit].second << ", " << qreg[targets[1]].second << ", " << qreg[targets[0]].second << ";" << std::endl;
 
-				for (const auto& c: controls)
-					of << "c";
-                of << "cx";
+				for (const auto& c: controls) {
+					if (c.type == Control::neg)
+						of << "x " << qreg[c.qubit].second << ";" << std::endl;
+				}
+                return;
+			case P: 
+                of << op.str() << "cx";
 				for (const auto& c: controls)
 					of << " " << qreg[c.qubit].second << ",";
-                of << " " << qreg[controls[0].qubit].second << ", " << qreg[targets[1]].second << ";" << std::endl;
+                of << qreg[targets[1]].second << ", " << qreg[targets[0]].second << ";" << std::endl;
+
+                of << op.str() << "x";
+				for (const auto& c: controls)
+					of << " " << qreg[c.qubit].second << ",";
+                of << qreg[targets[1]].second << ";" << std::endl;
 				return;
 			case Pdag:
-				of << "cx";
+				of << op.str() << "x";
 				for (const auto& c: controls)
 					of << " " << qreg[c.qubit].second << ",";
-				of << " " << qreg[controls[0].qubit].second << ", " << qreg[targets[1]].second << ";" << std::endl;
+				of << qreg[targets[1]].second << ";" << std::endl;
 
-				for (const auto& c: controls)
-					of << "c";
-				of << "ccx";
+				of << op.str() << "cx";
 				for (const auto& c: controls)
 					of << " " << qreg[c.qubit].second << ",";
-				of << " " << qreg[controls[0].qubit].second << ", " << qreg[targets[1]].second << ", " << qreg[targets[0]].second << ";" << std::endl;
+				of << qreg[targets[1]].second << ", " << qreg[targets[0]].second << ";" << std::endl;
 				return;
 			default: 
                 std::cerr << "gate type (index) " << (int) type << " could not be converted to OpenQASM" << std::endl;
+		}
+
+		for (const auto& c: controls) {
+			if (c.type == Control::neg)
+				of << "x " << qreg[c.qubit].second << ";" << std::endl;
 		}
 		of << op.str();
 		for (const auto& c: controls) {
@@ -682,11 +693,15 @@ namespace qc {
         for(auto target: targets) {
 			of << " " << qreg[target].second << ";" << std::endl;
 		}
+		for (const auto& c: controls) {
+			if (c.type == Control::neg)
+				of << "x " << qreg[c.qubit].second << ";" << std::endl;
+		}
 	}
 
-	void StandardOperation::dumpReal([[maybe_unused]] std::ofstream& of) const {}
+	void StandardOperation::dumpReal([[maybe_unused]] std::ostream& of) const {}
 
-	void StandardOperation::dumpQiskit(std::ofstream& of, const regnames_t& qreg,[[maybe_unused]] const regnames_t& creg, const char* anc_reg_name) const {
+	void StandardOperation::dumpQiskit(std::ostream& of, const regnames_t& qreg,[[maybe_unused]] const regnames_t& creg, const char* anc_reg_name) const {
 		std::ostringstream op;
 		if (targets.size() > 2 || (targets.size() > 1 && type != SWAP && type != iSWAP && type != P && type != Pdag)) {
 			std::cerr << "Multiple targets are not supported in general at the moment" << std::endl;

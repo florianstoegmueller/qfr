@@ -2,9 +2,6 @@ cmake_minimum_required(VERSION 3.10...3.16)
 if(${CMAKE_VERSION} VERSION_LESS 3.12)
 	cmake_policy(VERSION ${CMAKE_MAJOR_VERSION}.${CMAKE_MINOR_VERSION})
 endif()
-set(CMAKE_CXX_STANDARD 14)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-
 
 project(qfr
         VERSION 1.0.5
@@ -49,8 +46,6 @@ add_subdirectory(src)
 
 option(BUILD_TESTS "Also build tests for QFR project" OFF)
 if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME OR BUILD_TESTS)
-	handle_submodule(googletest)
-
 	enable_testing()
 	include(GoogleTest)
 	add_subdirectory(test)

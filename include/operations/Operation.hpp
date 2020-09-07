@@ -16,14 +16,25 @@
 #include <cstring>
 
 #include "DDpackage.h"
+#include "DDexport.h"
 
 #define DEBUG_MODE_OPERATIONS 0
 #define UNUSED(x) {(void) x;}
 
 namespace qc {
+	class QFRException : public std::invalid_argument {
+		std::string msg;
+	public:
+		explicit QFRException(std::string  msg) : std::invalid_argument("QFR Exception"), msg(std::move(msg)) { }
+
+		const char *what() const noexcept override {
+			return msg.c_str();
+		}
+	};
+
 	using regnames_t=std::vector<std::pair<std::string, std::string>>;
 	enum Format {
-		Real, OpenQASM, GRCS, Qiskit
+		Real, OpenQASM, GRCS, Qiskit, TFC
 	};	
 
 	struct Control {
@@ -122,7 +133,10 @@ namespace qc {
 		static std::map<unsigned short, unsigned short> standardPermutation;
 
 		Operation() = default;
-
+		Operation(const Operation& op) = delete;
+		Operation(Operation&& op) noexcept = default;
+		Operation& operator=(const Operation& op) = delete;
+		Operation& operator=(Operation&& op) noexcept = default;
 		// Virtual Destructor
 		virtual ~Operation() = default;
 
@@ -257,10 +271,9 @@ namespace qc {
 					return true;
 			}
 
-			for (const auto c:controls) {
-				if (c.qubit == i)
-					return true;
-			}
+			if (std::any_of(controls.begin(), controls.end(), [&i](Control c) { return c.qubit == i; }))
+				return true;
+
 			return false;
 		}
 
@@ -271,9 +284,9 @@ namespace qc {
 			return op.print(os);
 		}
 
-		virtual void dumpOpenQASM(std::ofstream& of, const regnames_t& qreg, const regnames_t& creg) const = 0;
-		virtual void dumpReal(std::ofstream& of) const = 0;
-		virtual void dumpQiskit(std::ofstream& of, const regnames_t& qreg, const regnames_t& creg, const char* anc_reg_name) const = 0;
+		virtual void dumpOpenQASM(std::ostream& of, const regnames_t& qreg, const regnames_t& creg) const = 0;
+		virtual void dumpReal(std::ostream& of) const = 0;
+		virtual void dumpQiskit(std::ostream& of, const regnames_t& qreg, const regnames_t& creg, const char* anc_reg_name) const = 0;
 	};
 }
 #endif //INTERMEDIATEREPRESENTATION_OPERATION_H

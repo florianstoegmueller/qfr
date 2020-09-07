@@ -43,6 +43,14 @@ namespace qc {
 			return true;
 		}
 
+		bool isNonUnitaryOperation() const override {
+			bool isNonUnitary = false;
+			for (const auto& op: ops) {
+				isNonUnitary |= op->isNonUnitaryOperation();
+			}
+			return isNonUnitary;
+		}
+
 		dd::Edge getDD(std::unique_ptr<dd::Package>& dd, std::array<short, MAX_QUBITS>& line) const override {
 			dd::Edge e = dd->makeIdent(0, short(nqubits - 1));
 			for (auto& op: ops) {
@@ -113,19 +121,19 @@ namespace qc {
 			return false;
 		}
 
-		void dumpOpenQASM(std::ofstream& of, const regnames_t& qreg, const regnames_t& creg) const override {
-			for (auto& op: ops) { 
+		void dumpOpenQASM(std::ostream& of, const regnames_t& qreg, const regnames_t& creg) const override {
+			for (auto& op: ops) {
 				op->dumpOpenQASM(of, qreg, creg);
 			}
 		}
 
-		void dumpReal(std::ofstream& of) const override {
+		void dumpReal(std::ostream& of) const override {
 			for (auto& op: ops) {
 				op->dumpReal(of);
 			}
 		}
 
-		void dumpQiskit(std::ofstream& of, const regnames_t& qreg, const regnames_t& creg, const char *anc_reg_name) const override {
+		void dumpQiskit(std::ostream& of, const regnames_t& qreg, const regnames_t& creg, const char *anc_reg_name) const override {
 			for (auto& op: ops) {
 				op->dumpQiskit(of, qreg, creg, anc_reg_name);
 			}

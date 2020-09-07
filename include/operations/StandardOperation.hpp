@@ -92,7 +92,7 @@ namespace qc {
 		static OpType parseU3(fp& lambda, fp& phi, fp& theta);
 		static OpType parseU2(fp& lambda, fp& phi);
 		static OpType parseU1(fp& lambda);
-		
+
 		void checkUgate();
 		void setup(unsigned short nq, fp par0, fp par1, fp par2);	
 		
@@ -144,9 +144,9 @@ namespace qc {
 		dd::Edge getiSWAPDD2(std::unique_ptr<dd::Package>& dd, std::array<short, MAX_QUBITS>& line, const std::map<unsigned short, unsigned short>& permutation = standardPermutation, const std::map<unsigned short, unsigned short>& varMap = standardPermutation) const;
 		dd::Edge getiSWAPinvDD2(std::unique_ptr<dd::Package>& dd, std::array<short, MAX_QUBITS>& line, const std::map<unsigned short, unsigned short>& permutation = standardPermutation, const std::map<unsigned short, unsigned short>& varMap = standardPermutation) const;
 
-		void dumpOpenQASM(std::ofstream& of, const regnames_t& qreg, const regnames_t& creg) const override;
-		void dumpReal(std::ofstream& of) const override;
-		void dumpQiskit(std::ofstream& of, const regnames_t& qreg, const regnames_t& creg, const char* anc_reg_name) const override;
+		void dumpOpenQASM(std::ostream& of, const regnames_t& qreg, const regnames_t& creg) const override;
+		void dumpReal(std::ostream& of) const override;
+		void dumpQiskit(std::ostream& of, const regnames_t& qreg, const regnames_t& creg, const char* anc_reg_name) const override;
 	};
 
 }
