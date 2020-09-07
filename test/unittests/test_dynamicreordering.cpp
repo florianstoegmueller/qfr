@@ -140,6 +140,39 @@ TEST_F(DynamicReorderingTest, mct_sifting_large) {
 	EXPECT_EQ(dd->size(e), 32);
 }
 
+TEST_F(DynamicReorderingTest, exchangeCX) {
+	std::stringstream ss{};
+	ss
+			<< ".numvars 4\n"
+			<< ".variables b a c d\n"
+			<< ".begin\n"
+			<< "z2 a c\n"
+			<< "z2 b d\n"
+			<< ".end\n";
+	qc->import(ss, qc::Real);
+	e = qc->buildFunctionality(dd);
+	dd::export2Dot(e, "testExchangeGoal.dot", false, true, true);
+	std::cout << "Goal: " << std::endl;
+	dd->printDD(e, 64);
+	std::cout << std::endl;
+
+	std::stringstream ss2{};
+	ss2
+			<< ".numvars 4\n"
+			<< ".variables a b c d\n"
+			<< ".begin\n"
+			<< "z2 a c\n"
+			<< "z2 b d\n"
+			<< ".end\n";
+	qc->import(ss2, qc::Real);
+	in = qc->buildFunctionality(dd);
+	in = dd->exchangeBaseCase(in, 0, 1);
+	std::cout << "Real: " << std::endl;
+	dd::export2Dot(in, "testExchangeReal.dot", false, true, true);
+	dd->printDD(in, 64);
+	EXPECT_EQ(dd->size(e), dd->size(in));
+}
+
 INSTANTIATE_TEST_SUITE_P(SomeCircuits, DynamicReorderingTestVisualisation, testing::Values("bell", "grover", "test2", "test3", "test4", "test5"),
 		[](const testing::TestParamInfo<DynamicReorderingTestVisualisation::ParamType>& info) {
 			auto s = info.param;
@@ -149,10 +182,10 @@ INSTANTIATE_TEST_SUITE_P(SomeCircuits, DynamicReorderingTestVisualisation, testi
 
 TEST_P(DynamicReorderingTestVisualisation, simulationSize) {
 	in = dd->makeZeroState(qc->getNqubits());
-	std::tie(none, varMapNone) = qc->simulate(in, dd, dd::None);
+	none = qc->simulate(in, dd);
 	std::stringstream ss{};
 	ss << output_dir << GetParam() << "_sim_none.dot";
-	dd->export2Dot(none, ss.str(), true);
+	dd::export2Dot(none, ss.str(), true, true, true);
 	auto sizeNone = dd->size(none);
 
 	qc->reset();
@@ -162,7 +195,7 @@ TEST_P(DynamicReorderingTestVisualisation, simulationSize) {
 	std::tie(sifting, varMapSifting) = qc->simulate(in, dd, dd::Sifting);
 	std::stringstream ss2{};
 	ss2 << output_dir << GetParam() << "_sim_sifting.dot";
-	dd->export2Dot(sifting, ss2.str(), true);
+	dd::export2Dot(sifting, ss2.str(), true, true, true);
 	auto sizeSifting = dd->size(sifting);
 	for (const auto& var: varMapSifting) {
 		if (var.first >= qc->getNqubits()) break;
@@ -173,10 +206,10 @@ TEST_P(DynamicReorderingTestVisualisation, simulationSize) {
 }
 
 TEST_P(DynamicReorderingTestVisualisation, constructionSize) {
-	std::tie(none, varMapNone) = qc->buildFunctionality(dd, dd::None);
+	none = qc->buildFunctionality(dd);
 	std::stringstream ss{};
 	ss << output_dir << GetParam() << "_matrix_none.dot";
-	dd->export2Dot(none, ss.str(), false);
+	dd::export2Dot(none, ss.str(), false, true, true);
 	auto sizeNone = dd->size(none);
 
 	qc->reset();
@@ -185,7 +218,7 @@ TEST_P(DynamicReorderingTestVisualisation, constructionSize) {
 	std::tie(sifting, varMapSifting) = qc->buildFunctionality(dd, dd::Sifting);
 	std::stringstream ss2{};
 	ss2 << output_dir << GetParam() << "_matrix_sifting.dot";
-	dd->export2Dot(sifting, ss2.str(), false);
+	dd::export2Dot(sifting, ss2.str(), false, true, true);
 	auto sizeSifting = dd->size(sifting);
 	for (const auto& var: varMapSifting) {
 		if (var.first >= qc->getNqubits()) break;
