@@ -2,3 +2,7 @@
 	path = extern/dd_package
 	url = https://github.com/florianstoegmueller/dd_package.git
 	branch = dynreorder
+[submodule "extern/googletest"]
+	path = extern/googletest
+	url = https://github.com/google/googletest.git
+	branch = master
