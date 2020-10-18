@@ -1256,7 +1256,8 @@ namespace qc {
 		}
 
 		// change the tracked qubit mapping to the expected output mapping
-		changePermutation(e, map, outputPermutation, line, dd);
+		changePermutation2(e, map, outputPermutation, varMap, line, dd);
+		e = dd->dynamicReorder(e, varMap, strat);
 
 		// reduce ancillae according to variable mapping
 		reduceAncillae(e, dd, varMap);
@@ -1317,7 +1318,8 @@ namespace qc {
 		}
 
 		// change the tracked qubit mapping to the expected output mapping
-		changePermutation(e, map, outputPermutation, line, dd);
+		changePermutation2(e, map, outputPermutation, varMap, line, dd);
+		e = dd->dynamicReorder(e, varMap, strat);
 
 		return {e, varMap};
 	}
@@ -1814,6 +1816,74 @@ namespace qc {
 				on = dd->multiply(on, op.getSWAPDD(dd, line, from));
 			}
 			op.resetLine(line, from);
+			dd->incRef(on);
+			dd->decRef(saved);
+			dd->garbageCollect();
+
+			// update permutation
+			from.at(i) = goal;
+			from.at(j) = current;
+
+			#if DEBUG_MODE_QC
+			std::cout << "Changed permutation" << std::endl;
+			printPermutationMap(from);
+			#endif
+		}
+
+	}
+
+	void QuantumComputation::changePermutation2(dd::Edge& on, qc::permutationMap& from, const qc::permutationMap& to, const qc::permutationMap& varMap, std::array<short, qc::MAX_QUBITS>& line, std::unique_ptr<dd::Package>& dd, bool regular) {
+		assert(from.size() >= to.size());
+
+		#if DEBUG_MODE_QC
+		std::cout << "Trying to change: " << std::endl;
+		printPermutationMap(from);
+		std::cout << "to: " << std::endl;
+		printPermutationMap(to);
+		#endif
+
+		auto n = (short)(on.p->v + 1);
+
+		// iterate over (k,v) pairs of second permutation
+		for (const auto& kv: to) {
+			unsigned short i = kv.first;
+			unsigned short goal = kv.second;
+
+			// search for key in the first map
+			auto it = from.find(i);
+			if (it == from.end()) {
+				throw QFRException("[changePermutation] Key " + std::to_string(it->first) + " was not found in first permutation. This should never happen.");
+			}
+			unsigned short current = it->second;
+
+			// permutations agree for this key value
+			if(current == goal) continue;
+
+			// search for goal value in first permutation
+			unsigned short j = 0;
+			for(const auto& pair: from) {
+				unsigned short value = pair.second;
+				if (value == goal) {
+					j = pair.first;
+					break;
+				}
+			}
+
+			// swap i and j
+			auto op = qc::StandardOperation(n, {varMap.at(i), varMap.at(j)}, qc::SWAP);
+
+			#if DEBUG_MODE_QC
+			std::cout << "Apply SWAP: " << i << " " << j << std::endl;
+			#endif
+
+			op.setLine2(line, from, varMap);
+			auto saved = on;
+			if (regular) {
+				on = dd->multiply(op.getSWAPDD2(dd, line, from, varMap), on);
+			} else {
+				on = dd->multiply(on, op.getSWAPDD2(dd, line, from, varMap));
+			}
+			op.resetLine2(line, from, varMap);
 			dd->incRef(on);
 			dd->decRef(saved);
 			dd->garbageCollect();

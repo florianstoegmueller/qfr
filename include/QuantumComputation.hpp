@@ -141,6 +141,7 @@ namespace qc {
 		// apply swaps 'on' DD in order to change 'from' to 'to'
 		// where |from| >= |to|
 		static void changePermutation(dd::Edge& on, qc::permutationMap& from, const qc::permutationMap& to, std::array<short, qc::MAX_QUBITS>& line, std::unique_ptr<dd::Package>& dd, bool regular = true);
+		static void changePermutation2(dd::Edge& on, qc::permutationMap& from, const qc::permutationMap& to, const qc::permutationMap& varMap, std::array<short, qc::MAX_QUBITS>& line, std::unique_ptr<dd::Package>& dd, bool regular = true);
 
 		void import(const std::string& filename);
 		void import(const std::string& filename, Format format);
@@ -226,6 +227,19 @@ namespace qc {
 			ancregs.clear();
 			initialLayout.clear();
 			outputPermutation.clear();
+		}
+
+		virtual void reset(std::unique_ptr<dd::Package>& dd) {
+			ops.clear();
+			nqubits = 0;
+			nclassics = 0;
+			nancillae = 0;
+			qregs.clear();
+			cregs.clear();
+			ancregs.clear();
+			initialLayout.clear();
+			outputPermutation.clear();
+			dd->reset();
 		}
 
 		/**

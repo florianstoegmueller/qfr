@@ -173,7 +173,7 @@ TEST_F(DynamicReorderingTest, exchangeCX) {
 	EXPECT_EQ(dd->size(e), dd->size(in));
 }
 
-INSTANTIATE_TEST_SUITE_P(SomeCircuits, DynamicReorderingTestVisualisation, testing::Values("bell", "grover", "test2", "test3", "test4", "test5"),
+INSTANTIATE_TEST_SUITE_P(SomeCircuits, DynamicReorderingTestVisualisation, testing::Values("bell", "grover", "test2", "test3", "test4", "test5", "test6", "test7", "test8", "test9"),
 		[](const testing::TestParamInfo<DynamicReorderingTestVisualisation::ParamType>& info) {
 			auto s = info.param;
 			std::replace( s.begin(), s.end(), '.', '_');
@@ -188,7 +188,7 @@ TEST_P(DynamicReorderingTestVisualisation, simulationSize) {
 	dd::export2Dot(none, ss.str(), true, true, true);
 	auto sizeNone = dd->size(none);
 
-	qc->reset();
+	qc->reset(dd);
 	qc->import(circuit_dir + GetParam() + ".qasm");
 
 	in = dd->makeZeroState(qc->getNqubits());
@@ -212,7 +212,7 @@ TEST_P(DynamicReorderingTestVisualisation, constructionSize) {
 	dd::export2Dot(none, ss.str(), false, true, true);
 	auto sizeNone = dd->size(none);
 
-	qc->reset();
+	qc->reset(dd);
 	qc->import(circuit_dir + GetParam() + ".qasm");
 
 	std::tie(sifting, varMapSifting) = qc->buildFunctionality(dd, dd::Sifting);

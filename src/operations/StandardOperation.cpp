@@ -400,7 +400,7 @@ namespace qc {
 		e = dd->multiply(e, dd->makeGateDD(Sdagmat, nqubits, line));
 
 		line[varMap.at(permutation.at(targets[1]))] = LINE_TARGET;
-		e = dd->multiply(e, getSWAPDD(dd, line, permutation));
+		e = dd->multiply(e, getSWAPDD2(dd, line, permutation, varMap));
 
 		return e;
     }
