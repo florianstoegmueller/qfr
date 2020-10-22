@@ -65,8 +65,8 @@ TEST_F(DynamicReorderingTest, cx_exchange) {
 	dd->printDD(cx_dd, 64);
 	dd->printUniqueTable(2);
 
-	auto cx_exg = dd->exchangeBaseCase(cx_dd, 0, 1);
-	dd->printDD(cx_exg, 64);
+	dd->exchange(0, 1);
+	dd->printDD(cx_dd, 64);
 	dd->printUniqueTable(2);
 
 	auto cx_rev_dd = cx_rev.getDD(dd, line);
@@ -74,28 +74,27 @@ TEST_F(DynamicReorderingTest, cx_exchange) {
 	dd->printDD(cx_rev_dd, 64);
 	dd->printUniqueTable(2);
 
-	EXPECT_TRUE(dd->equals(cx_exg, cx_rev_dd));
+	EXPECT_TRUE(dd->equals(cx_dd, cx_rev_dd));
 }
 
 TEST_F(DynamicReorderingTest, cx_exchange_unique_table) {
 	auto cx = qc::StandardOperation(2,qc::Control(1),0,qc::X);
 	auto cx_rev = qc::StandardOperation(2,qc::Control(0),1,qc::X);
+	auto cx_dd = cx.getDD(dd, line);
+	dd->incRef(cx_dd);
+	dd->printDD(cx_dd, 64);
+	dd->printUniqueTable(2);
+
+	dd->exchange(0, 1);
+	dd->printDD(cx_dd, 64);
+	dd->printUniqueTable(2);
 
 	auto cx_rev_dd = cx_rev.getDD(dd, line);
 	dd->incRef(cx_rev_dd);
 	dd->printDD(cx_rev_dd, 64);
 	dd->printUniqueTable(2);
 
-	auto cx_dd = cx.getDD(dd, line);
-	dd->incRef(cx_dd);
-	dd->printDD(cx_dd, 64);
-	dd->printUniqueTable(2);
-
-	auto cx_exg = dd->exchangeBaseCase(cx_dd, 0, 1);
-	dd->printDD(cx_exg, 64);
-	dd->printUniqueTable(2);
-
-	EXPECT_TRUE(dd->equals(cx_exg, cx_rev_dd));
+	EXPECT_TRUE(dd->equals(cx_dd, cx_rev_dd));
 }
 
 TEST_F(DynamicReorderingTest, toffoli_sifting) {
@@ -166,7 +165,7 @@ TEST_F(DynamicReorderingTest, exchangeCX) {
 			<< ".end\n";
 	qc->import(ss2, qc::Real);
 	in = qc->buildFunctionality(dd);
-	in = dd->exchangeBaseCase(in, 0, 1);
+	dd->exchange(0, 1);
 	std::cout << "Real: " << std::endl;
 	dd::export2Dot(in, "testExchangeReal.dot", false, true, true);
 	dd->printDD(in, 64);
