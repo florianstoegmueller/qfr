@@ -67,6 +67,8 @@ namespace qc {
             oracle(qc);
             diffusion(qc);
         }
+	    // properly uncompute ancillary qubit
+	    qc.emplace_back<StandardOperation>(nqubits+nancillae, nqubits, X);
     }
 
     /***
@@ -83,6 +85,7 @@ namespace qc {
 		    initialLayout.insert({ i, i});
 		    outputPermutation.insert({ i, i});
 	    }
+	    line.fill(LINE_DEFAULT);
 
         std::mt19937_64 generator(this->seed);
         std::uniform_int_distribution<unsigned long long> distribution(0, static_cast<unsigned long long>(std::pow((long double)2, std::max(static_cast<unsigned short>(0),nqubits)) - 1));
@@ -102,7 +105,7 @@ namespace qc {
     }
 
     dd::Edge Grover::buildFunctionality(std::unique_ptr<dd::Package>& dd) {
-        dd->useMatrixNormalization(true);
+        dd->setMode(dd::Matrix);
 
         QuantumComputation groverIteration(nqubits+1);
         oracle(groverIteration);
@@ -130,20 +133,30 @@ namespace qc {
         dd->incRef(f);
         e = f;
 
+        // properly uncompute ancillary qubit
+	    f = dd->multiply(StandardOperation(nqubits+nancillae, nqubits, X).getDD(dd, line), e);
+	    dd->decRef(e);
+	    dd->incRef(f);
+	    e = f;
+
         auto q = removeQubit(nqubits);
         addAncillaryQubit(q.first, q.second);
-        reduceAncillae(e, dd);
-        reduceGarbage(e, dd);
+        e = reduceAncillae(e, dd);
 
         dd->decRef(iteration);
         dd->garbageCollect(true);
-        dd->useMatrixNormalization(false);
         return e;
     }
 
     dd::Edge Grover::simulate(const dd::Edge& in, std::unique_ptr<dd::Package>& dd) {
         //TODO: Enhance this simulation routine // delegate to simulator
-        return QuantumComputation::simulate(in, dd);
+
+        // initial state too small
+        dd::Edge initialState = in;
+        if (in.p->v == nqubits-1) {
+        	initialState = dd->extend(in, 1);
+        }
+        return QuantumComputation::simulate(initialState, dd);
     }
 
     std::ostream& Grover::printStatistics(std::ostream& os) {

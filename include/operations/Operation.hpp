@@ -16,14 +16,25 @@
 #include <cstring>
 
 #include "DDpackage.h"
+#include "DDexport.h"
 
 #define DEBUG_MODE_OPERATIONS 0
 #define UNUSED(x) {(void) x;}
 
 namespace qc {
+	class QFRException : public std::invalid_argument {
+		std::string msg;
+	public:
+		explicit QFRException(std::string  msg) : std::invalid_argument("QFR Exception"), msg(std::move(msg)) { }
+
+		const char *what() const noexcept override {
+			return msg.c_str();
+		}
+	};
+
 	using regnames_t=std::vector<std::pair<std::string, std::string>>;
 	enum Format {
-		Real, OpenQASM, GRCS, Qiskit
+		Real, OpenQASM, GRCS, Qiskit, TFC
 	};	
 
 	struct Control {
@@ -50,6 +61,50 @@ namespace qc {
 	static constexpr short LINE_CONTROL_NEG = 0;
 	static constexpr short LINE_DEFAULT     = -1;
 
+	// Supported Operations
+	enum OpType {
+		None,
+		// Standard Operations
+		I, H, X, Y, Z, S, Sdag, T, Tdag, V, Vdag, U3, U2, U1, RX, RY, RZ, SWAP, iSWAP, P, Pdag,
+		// Compound Operation
+		Compound,
+		// Non Unitary Operations
+		Measure, Reset, Snapshot, ShowProbabilities, Barrier,
+		// Classically-controlled Operation
+		ClassicControlled
+	};
+
+	static const std::map<std::string, OpType> identifierMap {
+			{ "0",   I    },
+			{ "id",  I    },
+			{ "h",   H    },
+			{ "n",   X    },
+			{ "c",   X    },
+			{ "x",   X    },
+			{ "y",   Y    },
+			{ "z",   Z    },
+			{ "s",   S    },
+			{ "si",  Sdag },
+			{ "sp",  Sdag },
+			{ "s+",  Sdag },
+			{ "sdg", Sdag },
+			{ "v",   V    },
+			{ "vi",  Vdag },
+			{ "vp",  Vdag },
+			{ "v+",  Vdag },
+			{ "rx",  RX   },
+			{ "ry",  RY   },
+			{ "rz",  RZ   },
+			{ "f",   SWAP },
+			{ "if",  SWAP },
+			{ "p",   P    },
+			{ "pi",  Pdag },
+			{ "p+",  Pdag },
+			{ "q",   RZ   },
+			{ "t",   T    },
+			{ "tdg", Tdag }
+	};
+
 	class Operation {
 	protected:
 		std::vector<unsigned short>       targets{};
@@ -57,6 +112,7 @@ namespace qc {
 		std::array<fp, MAX_PARAMETERS>    parameter{ };
 		
 		unsigned short nqubits     = 0;
+		OpType         type = None;         // Op type
 		bool           multiTarget = false; // flag to distinguish multi target operations
 		bool           controlled  = false; // flag to distinguish multi control operations
 		char           name[MAX_STRING_LENGTH]{ };
@@ -73,11 +129,14 @@ namespace qc {
 				permutation.insert({i, i});
 			return permutation;
 		}
+	public:
 		static std::map<unsigned short, unsigned short> standardPermutation;
 
-	public:
 		Operation() = default;
-
+		Operation(const Operation& op) = delete;
+		Operation(Operation&& op) noexcept = default;
+		Operation& operator=(const Operation& op) = delete;
+		Operation& operator=(Operation&& op) noexcept = default;
 		// Virtual Destructor
 		virtual ~Operation() = default;
 
@@ -90,12 +149,20 @@ namespace qc {
 			return targets;
 		}
 
+		size_t getNtargets() const {
+			return targets.size();
+		}
+
 		const std::vector<Control>& getControls() const {
 			return controls;
 		}
 		
 		std::vector<Control>& getControls() {
 			return controls;
+		}
+
+		size_t getNcontrols() const {
+			return controls.size();
 		}
 
 		unsigned short getNqubits() const { 
@@ -114,6 +181,10 @@ namespace qc {
 			return name;
 		}
 
+		virtual OpType getType() const {
+			return type;
+		}
+
 		// Setter
 		virtual void setNqubits(unsigned short nq) {
 			nqubits = nq;
@@ -125,6 +196,13 @@ namespace qc {
 
 		virtual void setControls(const std::vector<Control>& c) {
 			Operation::controls = c;
+		}
+
+		virtual void setName();
+
+		virtual void setGate(OpType g) {
+			type = g;
+			setName();
 		}
 
 		virtual void setParameter(const std::array<fp, MAX_PARAMETERS>& p) {
@@ -152,8 +230,31 @@ namespace qc {
 		virtual dd::Edge getInverseDD(std::unique_ptr<dd::Package>& dd, std::array<short, MAX_QUBITS>& line) const = 0;
 		virtual dd::Edge getInverseDD(std::unique_ptr<dd::Package>& dd, std::array<short, MAX_QUBITS>& line, std::map<unsigned short, unsigned short>& permutation) const = 0;
 
+		void setLine2(std::array<short, MAX_QUBITS>& line, const std::map<unsigned short, unsigned short>& permutation = standardPermutation, const std::map<unsigned short, unsigned short>& varMap = standardPermutation) const;
+		void resetLine2(std::array<short, MAX_QUBITS>& line, const std::map<unsigned short, unsigned short>& permutation = standardPermutation, const std::map<unsigned short, unsigned short>& varMap = standardPermutation) const;
+
+		virtual dd::Edge getDD2(std::unique_ptr<dd::Package>& dd, std::array<short, MAX_QUBITS>& line, std::map<unsigned short, unsigned short>& permutation, std::map<unsigned short, unsigned short>& varMap) const = 0;
+
+		virtual dd::Edge getInverseDD2(std::unique_ptr<dd::Package>& dd, std::array<short, MAX_QUBITS>& line, std::map<unsigned short, unsigned short>& permutation, std::map<unsigned short, unsigned short>& varMap) const = 0;
+
 		inline virtual bool isUnitary() const { 
 			return true; 
+		}
+
+		inline virtual bool isStandardOperation() const {
+			return false;
+		}
+
+		inline virtual bool isCompoundOperation() const {
+			return false;
+		}
+
+		inline virtual bool isNonUnitaryOperation() const {
+			return false;
+		}
+
+		inline virtual bool isClassicControlledOperation() const {
+			return false;
 		}
 
 		inline virtual bool isControlled() const  { 
@@ -170,10 +271,9 @@ namespace qc {
 					return true;
 			}
 
-			for (const auto c:controls) {
-				if (c.qubit == i)
-					return true;
-			}
+			if (std::any_of(controls.begin(), controls.end(), [&i](Control c) { return c.qubit == i; }))
+				return true;
+
 			return false;
 		}
 
@@ -184,9 +284,9 @@ namespace qc {
 			return op.print(os);
 		}
 
-		virtual void dumpOpenQASM(std::ofstream& of, const regnames_t& qreg, const regnames_t& creg) const = 0;
-		virtual void dumpReal(std::ofstream& of) const = 0;
-		virtual void dumpQiskit(std::ofstream& of, const regnames_t& qreg, const regnames_t& creg, const char* anc_reg_name) const = 0;
+		virtual void dumpOpenQASM(std::ostream& of, const regnames_t& qreg, const regnames_t& creg) const = 0;
+		virtual void dumpReal(std::ostream& of) const = 0;
+		virtual void dumpQiskit(std::ostream& of, const regnames_t& qreg, const regnames_t& creg, const char* anc_reg_name) const = 0;
 	};
 }
 #endif //INTERMEDIATEREPRESENTATION_OPERATION_H

@@ -12,19 +12,23 @@ namespace qc {
      * Protected Methods
      ***/
 	void QuantumComputation::importReal(std::istream& is) {
-		readRealHeader(is);
-		readRealGateDescriptions(is);
+		auto line = readRealHeader(is);
+		readRealGateDescriptions(is, line);
 	}
 
-	void QuantumComputation::readRealHeader(std::istream& is) {
+	int QuantumComputation::readRealHeader(std::istream& is) {
 		std::string cmd;
 		std::string variable;
+		int line = 0;
 
 		while (true) {
-			is >> cmd;
+			if(!static_cast<bool>(is >> cmd)) {
+				throw QFRException("[real parser] l:" + std::to_string(line) + " msg: Invalid file header");
+			}
 			std::transform(cmd.begin(), cmd.end(), cmd.begin(),
 			        [] (unsigned char ch) { return ::toupper(ch); }
 			        );
+			++line;
 
 			// skip comments
 			if (cmd.front() == '#') {
@@ -34,16 +38,21 @@ namespace qc {
 
 			// valid header commands start with '.'
 			if (cmd.front() != '.') {
-				throw QFRException("[real parser] Invalid file header");
+				throw QFRException("[real parser] l:" + std::to_string(line) + " msg: Invalid file header");
 			}
 
-			if (cmd == ".BEGIN") return; // header read complete
+			if (cmd == ".BEGIN") return line; // header read complete
 			else if (cmd == ".NUMVARS") {
-				is >> nqubits;
+				if(!static_cast<bool>(is >> nqubits)) {
+					nqubits = 0;
+				}
 				nclassics = nqubits;
 			} else if (cmd == ".VARIABLES") {
 				for (unsigned short i = 0; i < nqubits; ++i) {
-					is >> variable;
+					if(!static_cast<bool>(is >> variable) || variable.at(0) == '.') {
+						throw QFRException("[real parser] l:" + std::to_string(line) + " msg: Invalid or insufficient variables declared");
+					}
+
 					qregs.insert({ variable, { i, 1 }});
 					cregs.insert({ "c_" + variable, { i, 1 }});
 					initialLayout.insert({ i, i });
@@ -54,12 +63,12 @@ namespace qc {
                 for (unsigned short i = 0; i < nqubits; ++i) {
                     const auto value = is.get();
                     if (!is.good()) {
-                    	throw QFRException("[real parser] Failed read in '.constants' line");
+                    	throw QFRException("[real parser] l:" + std::to_string(line) + " msg: Failed read in '.constants' line");
                     }
                     if (value == '1') {
                         emplace_back<StandardOperation>(nqubits, i, X);
                     } else if (value != '-' && value != '0') {
-                    	throw QFRException("[real parser] Invalid value in '.constants' header: '" + std::to_string(value) + "'");
+                    	throw QFRException("[real parser] l:" + std::to_string(line) + " msg: Invalid value in '.constants' header: '" + std::to_string(value) + "'");
                     }
                 }
                 is.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
@@ -78,20 +87,23 @@ namespace qc {
                     std::transform(cmd.begin(), cmd.end(), cmd.begin(), [](const unsigned char c) { return ::toupper(c);});
 				}
 			} else {
-				throw QFRException("[real parser] Unknown command: " + cmd);
+				throw QFRException("[real parser] l:" + std::to_string(line) + " msg: Unknown command: " + cmd);
 			}
 
 		}
 	}
 
-	void QuantumComputation::readRealGateDescriptions(std::istream& is) {
+	void QuantumComputation::readRealGateDescriptions(std::istream& is, int line) {
 		std::regex gateRegex = std::regex("(r[xyz]|q|[0a-z](?:[+i])?)(\\d+)?(?::([-+]?[0-9]+[.]?[0-9]*(?:[eE][-+]?[0-9]+)?))?");
 		std::smatch m;
 		std::string cmd;
 
 		while (!is.eof()) {
-			is >> cmd;
+			if(!static_cast<bool>(is >> cmd)) {
+				throw QFRException("[real parser] l:" + std::to_string(line) + " msg: Failed to read command");
+			}
 			std::transform(cmd.begin(), cmd.end(), cmd.begin(), [](const unsigned char c) { return ::tolower(c);});
+			++line;
 
 			if (cmd.front() == '#') {
 				is.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
@@ -102,17 +114,17 @@ namespace qc {
 			else {
 				// match gate declaration
 				if (!std::regex_match(cmd, m, gateRegex)) {
-					throw QFRException("[real parser] Unsupported gate detected: " + cmd);
+					throw QFRException("[real parser] l:" + std::to_string(line) + " msg: Unsupported gate detected: " + cmd);
 				}
 
 				// extract gate information (identifier, #controls, divisor)
-				Gate gate;
+				OpType gate;
 				if (m.str(1) == "t") { // special treatment of t(offoli) for real format
 					gate = X;
 				} else {
 					auto it = identifierMap.find(m.str(1));
 					if (it == identifierMap.end()) {
-						throw QFRException("[real parser] Unknown gate identifier: " + m.str(1));
+						throw QFRException("[real parser] l:" + std::to_string(line) + " msg: Unknown gate identifier: " + m.str(1));
 					}
 					gate = (*it).second;
 				}
@@ -123,7 +135,7 @@ namespace qc {
 				else if (gate == P || gate == Pdag) ncontrols = 2;
 
 				if (ncontrols >= nqubits) {
-					throw QFRException("[real parser] Gate acts on " + std::to_string(ncontrols + 1) + " qubits, but only " + std::to_string(nqubits) + " qubits are available.");
+					throw QFRException("[real parser] l:" + std::to_string(line) + " msg: Gate acts on " + std::to_string(ncontrols + 1) + " qubits, but only " + std::to_string(nqubits) + " qubits are available.");
 				}
 
 				std::string qubits, label;
@@ -135,7 +147,7 @@ namespace qc {
 				// get controls and target
 				for (int i = 0; i < ncontrols; ++i) {
 					if (!(iss >> label)) {
-						throw QFRException("[real parser] Too few variables for gate " + m.str(1));
+						throw QFRException("[real parser] l:" + std::to_string(line) + " msg: Too few variables for gate " + m.str(1));
 					}
 
 					bool negativeControl = (label.at(0) == '-');
@@ -144,25 +156,26 @@ namespace qc {
 
 					auto iter = qregs.find(label);
 					if (iter == qregs.end()) {
-						throw QFRException("[real parser] Label " + label + " not found!");
+						throw QFRException("[real parser] l:" + std::to_string(line) + " msg: Label " + label + " not found!");
 					}
 					controls.emplace_back(iter->second.first, negativeControl? qc::Control::neg: qc::Control::pos);
 				}
 
 				if (!(iss >> label)) {
-					throw QFRException("[real parser] Too few variables (no target) for gate " + m.str(1));
+					throw QFRException("[real parser] l:" + std::to_string(line) + " msg: Too few variables (no target) for gate " + m.str(1));
 				}
 				auto iter = qregs.find(label);
 				if (iter == qregs.end()) {
-					throw QFRException("[real parser] Label " + label + " not found!");
+					throw QFRException("[real parser] l:" + std::to_string(line) + " msg: Label " + label + " not found!");
 				}
 
 				updateMaxControls(ncontrols);
 				unsigned short target = iter->second.first;
+				unsigned short target1 = 0;
 				auto x = nearbyint(lambda);
 				switch (gate) {
 					case None:
-						throw QFRException("[real parser] 'None' operation detected.");
+						throw QFRException("[real parser] l:" + std::to_string(line) + " msg: 'None' operation detected.");
 					case I:
 					case H:
 					case Y:
@@ -208,11 +221,19 @@ namespace qc {
 					case P:
 					case Pdag:
 					case iSWAP:
-						unsigned short target1 = controls.back().qubit;
+						target1 = controls.back().qubit;
 						controls.pop_back();
 						emplace_back<StandardOperation>(nqubits, controls, target, target1, gate);
 						break;
-
+					case Compound:
+					case Measure:
+					case Reset:
+					case Snapshot:
+					case ShowProbabilities:
+					case Barrier:
+					case ClassicControlled:
+						std::cerr << "Operation with invalid type " << gate << " read from real file. Proceed with caution!" << std::endl;
+						break;
 				}
 			}
 		}
@@ -286,7 +307,7 @@ namespace qc {
 			} else if (p.sym == Token::Kind::_if) {
 				p.scan();
 				p.check(Token::Kind::lpar);
-				p.check(Token::Kind::nninteger);
+				p.check(Token::Kind::identifier);
 				std::string creg = p.t.str;
 				p.check(Token::Kind::eq);
 				p.check(Token::Kind::nninteger);
@@ -295,9 +316,9 @@ namespace qc {
 
 				auto it = p.cregs.find(creg);
 				if (it == p.cregs.end()) {
-					Parser::error("Error in if statement: " + creg + " is not a creg!");
+					p.error("Error in if statement: " + creg + " is not a creg!");
 				} else {
-					emplace_back<ClassicControlledOperation>(p.Qop(), it->second.first + n);
+					emplace_back<ClassicControlledOperation>(p.Qop(), it->second, n);
 				}
 			} else if (p.sym == Token::Kind::snapshot) {
 				p.scan();
@@ -313,7 +334,7 @@ namespace qc {
 
 				for (auto& arg: arguments) {
 					if (arg.second != 1) {
-						Parser::error("ERROR in snapshot: arguments must be qubits");
+						p.error("Error in snapshot: arguments must be qubits");
 					}
 				}
 
@@ -328,7 +349,7 @@ namespace qc {
 				p.scan();
 				p.check(Token::Kind::semicolon);
 			} else {
-				Parser::error("ERROR: unexpected statement: started with " + qasm::KindNames[p.sym] + "!");
+				p.error("Unexpected statement: started with " + qasm::KindNames[p.sym] + "!");
 			}
 		} while (p.sym != Token::Kind::eof);
 	}
@@ -371,6 +392,217 @@ namespace qc {
 		}
 	}
 
+	void QuantumComputation::importTFC(std::istream& is) {
+		std::map<std::string, unsigned short> varMap{};
+		auto line = readTFCHeader(is, varMap);
+		readTFCGateDescriptions(is, line, varMap);
+	}
+
+	int QuantumComputation::readTFCHeader(std::istream& is, std::map<std::string, unsigned short>& varMap) {
+		std::string cmd;
+		std::string variable;
+		std::string identifier;
+		int line = 0;
+
+		std::string delimiter = ",";
+		size_t pos = 0;
+
+		std::vector<std::string> variables{};
+		std::vector<std::string> inputs{};
+		std::vector<std::string> outputs{};
+		std::vector<std::string> constants{};
+
+		while (true) {
+			if(!static_cast<bool>(is >> cmd)) {
+				throw QFRException("[tfc parser] l:" + std::to_string(line) + " msg: Invalid file header");
+			}
+			++line;
+
+			// skip comments
+			if (cmd.front() == '#') {
+				is.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+				continue;
+			}
+
+			// valid header commands start with '.' or end the header with BEGIN
+			if (cmd.front() != '.' && cmd != "BEGIN") {
+				throw QFRException("[tfc parser] l:" + std::to_string(line) + " msg: Invalid file header");
+			}
+
+			// header read complete
+			if (cmd == "BEGIN" || cmd == "begin")
+				break;
+
+			if (cmd == ".v") {
+				is >> std::ws;
+				std::getline(is, identifier);
+				while ((pos = identifier.find(delimiter)) != std::string::npos) {
+					variable = identifier.substr(0, pos);
+					variables.emplace_back(variable);
+					identifier.erase(0, pos+1);
+				}
+				variables.emplace_back(identifier);
+			} else if (cmd == ".i") {
+				is >> std::ws;
+				std::getline(is, identifier);
+				while ((pos = identifier.find(delimiter)) != std::string::npos) {
+					variable = identifier.substr(0, pos);
+					if (std::find(variables.begin(), variables.end(), variable) != variables.end()) {
+						inputs.emplace_back(variable);
+					} else {
+						throw QFRException("[tfc parser] l:" + std::to_string(line) + " msg: Unknown variable in input statement: " + cmd);
+					}
+					identifier.erase(0, pos+1);
+				}
+				if (std::find(variables.begin(), variables.end(), identifier) != variables.end()) {
+					inputs.emplace_back(identifier);
+				} else {
+					throw QFRException("[tfc parser] l:" + std::to_string(line) + " msg: Unknown variable in input statement: " + cmd);
+				}
+			} else if (cmd == ".o") {
+				is >> std::ws;
+				std::getline(is, identifier);
+				while ((pos = identifier.find(delimiter)) != std::string::npos) {
+					variable = identifier.substr(0, pos);
+					if (std::find(variables.begin(), variables.end(), variable) != variables.end()) {
+						outputs.emplace_back(variable);
+					} else {
+						throw QFRException("[tfc parser] l:" + std::to_string(line) + " msg: Unknown variable in output statement: " + cmd);
+					}
+					identifier.erase(0, pos+1);
+				}
+				if (std::find(variables.begin(), variables.end(), identifier) != variables.end()) {
+					outputs.emplace_back(identifier);
+				} else {
+					throw QFRException("[tfc parser] l:" + std::to_string(line) + " msg: Unknown variable in output statement: " + cmd);
+				}
+			} else if (cmd == ".c") {
+				is >> std::ws;
+				std::getline(is, identifier);
+				while ((pos = identifier.find(delimiter)) != std::string::npos) {
+					variable = identifier.substr(0, pos);
+					constants.emplace_back(variable);
+					identifier.erase(0, pos+1);
+				}
+				constants.emplace_back(identifier);
+			} else if (cmd == ".ol") { // ignore output labels
+				is.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+				continue;
+			} else {
+				throw QFRException("[tfc parser] l:" + std::to_string(line) + " msg: Unknown command: " + cmd);
+			}
+		}
+		addQubitRegister(inputs.size());
+		auto nconstants = variables.size() - inputs.size();
+		if (nconstants > 0) {
+			addAncillaryRegister(nconstants);
+		}
+
+		auto qidx = 0;
+		auto constidx = inputs.size();
+		for (auto & var : variables) {
+			// check if variable is input
+			if (std::count(inputs.begin(), inputs.end(), var)) {
+				varMap.insert({var, qidx++});
+			} else {
+				if (constants.at(constidx-inputs.size()) == "0" || constants.at(constidx-inputs.size()) == "1") {
+					// add X operation in case of initial value 1
+					if (constants.at(constidx-inputs.size()) == "1")
+						emplace_back<StandardOperation>(nqubits+nancillae, constidx, X);
+					varMap.insert({var, constidx++});
+				} else {
+					throw QFRException("[tfc parser] l:" + std::to_string(line) + " msg: Non-binary constant specified: " + cmd);
+				}
+			}
+		}
+
+		for (size_t q=0; q<variables.size(); ++q) {
+			variable = variables.at(q);
+			auto p = varMap.at(variable);
+			initialLayout[q] = p;
+			if (std::count(outputs.begin(), outputs.end(), variable)) {
+				outputPermutation[q] = p;
+			} else {
+				outputPermutation.erase(q);
+				garbage.set(p);
+			}
+		}
+
+		return line;
+	}
+
+	void QuantumComputation::readTFCGateDescriptions(std::istream& is, int line, std::map<std::string, unsigned short>& varMap) {
+		std::regex gateRegex = std::regex("([tTfF])(\\d+)");
+		std::smatch m;
+		std::string cmd;
+
+		while (!is.eof()) {
+			if(!static_cast<bool>(is >> cmd)) {
+				throw QFRException("[tfc parser] l:" + std::to_string(line) + " msg: Failed to read command");
+			}
+			++line;
+
+			if (cmd.front() == '#') {
+				is.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+				continue;
+			}
+
+			if (cmd == "END" || cmd == "end") break;
+			else {
+				// match gate declaration
+				if (!std::regex_match(cmd, m, gateRegex)) {
+					throw QFRException("[tfc parser] l:" + std::to_string(line) + " msg: Unsupported gate detected: " + cmd);
+				}
+
+				// extract gate information (identifier, #controls, divisor)
+				OpType gate;
+				if (m.str(1) == "t" || m.str(1) == "T") { // special treatment of t(offoli) for real format
+					gate = X;
+				} else {
+					gate = SWAP;
+				}
+				unsigned short ncontrols = m.str(2).empty() ? 0 : static_cast<unsigned short>(std::stoul(m.str(2), nullptr, 0)) - 1;
+
+				if (ncontrols >= nqubits+nancillae) {
+					throw QFRException("[tfc parser] l:" + std::to_string(line) + " msg: Gate acts on " + std::to_string(ncontrols + 1) + " qubits, but only " + std::to_string(nqubits+nancillae) + " qubits are available.");
+				}
+
+				std::string qubits, label;
+				is >> std::ws;
+				getline(is, qubits);
+
+				std::vector<Control> controls{ };
+
+				std::string delimiter = ",";
+				size_t pos = 0;
+
+				while ((pos = qubits.find(delimiter)) != std::string::npos) {
+					label = qubits.substr(0, pos);
+					if (label.back() == '\'') {
+						label.erase(label.size()-1);
+						controls.emplace_back(varMap.at(label), Control::neg);
+					} else {
+						controls.emplace_back(varMap.at(label));
+					}
+					qubits.erase(0, pos+1);
+				}
+				controls.emplace_back(varMap.at(qubits));
+
+				if (gate == X) {
+					unsigned short target = controls.back().qubit;
+					controls.pop_back();
+					emplace_back<StandardOperation>(nqubits, controls, target);
+				} else {
+					unsigned short target0 = controls.back().qubit;
+					controls.pop_back();
+					unsigned short target1 = controls.back().qubit;
+					controls.pop_back();
+					emplace_back<StandardOperation>(nqubits, controls, target0, target1, gate);
+				}
+			}
+		}
+	}
+
 	/***
      * Public Methods
      ***/
@@ -393,6 +625,8 @@ namespace qc {
 			import(filename, OpenQASM);
 		} else if(extension == "txt") {
 			import(filename, GRCS);
+		} else if (extension == "tfc") {
+			import(filename, TFC);
 		} else {
 			throw QFRException("[import] extension " + extension + " not recognized");
 		}
@@ -428,11 +662,17 @@ namespace qc {
 				if (!lookForOpenQASM_IO_Layout(is)) {
 					for (unsigned short i = 0; i < nqubits; ++i) {
 						initialLayout.insert({ i, i});
-						outputPermutation.insert({ i, i});
+						// only add to output permutation if the qubit is actually acted upon
+						if (!isIdleQubit(i))
+							outputPermutation.insert({ i, i});
 					}
 				}
 				break;
-			case GRCS: importGRCS(is);
+			case GRCS:
+				importGRCS(is);
+				break;
+			case TFC:
+				importTFC(is);
 				break;
 			default:
 				throw QFRException("[import] Format " + std::to_string(format) + " not yet supported");
@@ -500,6 +740,7 @@ namespace qc {
 			unsigned short j = totalqubits + i;
 			initialLayout.insert({ j, j});
 			outputPermutation.insert({ j, j});
+			ancillary.set(j);
 		}
 		nancillae += nq;
 
@@ -535,7 +776,7 @@ namespace qc {
 		printRegisters(std::cout);
 		#endif
 
-		if (isAncilla(physical_qubit_index)) {
+		if (physicalQubitIsAncillary(physical_qubit_index)) {
 			#if DEBUG_MODE_QC
 			std::cout << physical_qubit_index << " is ancilla" << std::endl;
 			#endif
@@ -647,6 +888,17 @@ namespace qc {
 			op->setNqubits(nqubits + nancillae);
 		}
 
+		// update ancillary and garbage tracking
+		if (nqubits+nancillae < qc::MAX_QUBITS) {
+			for (unsigned short i=logical_qubit_index; i<nqubits+nancillae; ++i) {
+				ancillary[i] = ancillary[i+1];
+				garbage[i] = garbage[i+1];
+			}
+			// unset last entry
+			ancillary.reset(nqubits+nancillae);
+			garbage.reset(nqubits+nancillae);
+		}
+
 		return { physical_qubit_index, output_qubit_index};
 	}
 
@@ -690,8 +942,9 @@ namespace qc {
 		// index of logical qubit
 		unsigned short logical_qubit_index = nqubits + nancillae;
 
-		// increase ancillae count
+		// increase ancillae count and mark as ancillary
 		nancillae++;
+		ancillary.set(logical_qubit_index);
 
 		#if DEBUG_MODE_QC
 		std::cout << "Updated registers: " << std::endl;
@@ -721,7 +974,6 @@ namespace qc {
 		}
 	}
 
-	/*
 	void QuantumComputation::addQubit(unsigned short logical_qubit_index, unsigned short physical_qubit_index, short output_qubit_index) {
 		if (initialLayout.count(physical_qubit_index) || outputPermutation.count(physical_qubit_index)) {
 			std::cerr << "Attempting to insert physical qubit that is already assigned" << std::endl;
@@ -735,13 +987,40 @@ namespace qc {
 			// TODO: this does not necessarily have to lead to an error. A new qubit register could be created and all ancillaries shifted
 		}
 
-		std::cerr << "Function 'addQubit' currently not implemented" << std::endl;
-		exit(1);
-		// TODO: implement this function
+		// check if qubit fits in existing register
+		bool fusionPossible = false;
+		for( auto& qreg : qregs) {
+			auto& q_start_index = qreg.second.first;
+			auto& q_count = qreg.second.second;
+			// 1st case: can append to start of existing register
+			if (q_start_index == physical_qubit_index + 1) {
+				q_start_index--;
+				q_count++;
+				fusionPossible = true;
+				break;
+			}
+			// 2nd case: can append to end of existing register
+			else if (q_start_index + q_count == physical_qubit_index) {
+				if (physical_qubit_index == nqubits) {
+					// need to shift ancillaries
+					for (auto& ancreg: ancregs) {
+						ancreg.second.first++;
+					}
+				}
+				q_count++;
+				fusionPossible = true;
+				break;
+			}
+		}
 
-		// qubit either fits in the beginning/the end or in between two existing registers
-		// if it fits at the very end of the last qubit register it has to be checked
-		// if the indices of ancillary registers need to be shifted by one
+		consolidateRegister(qregs);
+
+		if (qregs.empty()) {
+			qregs.insert({DEFAULT_QREG, {physical_qubit_index, 1}});
+		} else if(!fusionPossible) {
+			auto new_reg_name = std::string(DEFAULT_QREG) + "_" + std::to_string(physical_qubit_index);
+			qregs.insert({new_reg_name, { physical_qubit_index, 1}});
+		}
 
 		// increase qubit count
 		nqubits++;
@@ -755,66 +1034,171 @@ namespace qc {
 		for (auto& op:ops) {
 			op->setNqubits(nqubits + nancillae);
 		}
-	}
-	*/
 
-	void QuantumComputation::reduceAncillae(dd::Edge& e, std::unique_ptr<dd::Package>& dd) {
-		if (e.p->v < nqubits) return;
-		for(auto& edge: e.p->e)
-			reduceAncillae(edge, dd);
-
-		auto saved = e;
-		e = dd->makeNonterminal(e.p->v, {e.p->e[0], dd::Package::DDzero, e.p->e[2], dd::Package::DDzero });
-		auto c = dd->cn.mulCached(e.w, saved.w);
-		e.w = dd->cn.lookup(c);
-		dd->cn.releaseCached(c);
-		dd->incRef(e);
-		dd->decRef(saved);
-		dd->garbageCollect();
+		// update ancillary and garbage tracking
+		for (unsigned short i=nqubits+nancillae-1; i>logical_qubit_index; --i) {
+			ancillary[i] = ancillary[i-1];
+			garbage[i] = garbage[i-1];
+		}
+		// unset new entry
+		ancillary.reset(logical_qubit_index);
+		garbage.reset(logical_qubit_index);
 	}
 
-	void QuantumComputation::reduceGarbage(dd::Edge& e, std::unique_ptr<dd::Package>& dd) {
-		#if DEBUG_MODE_QC
-		std::cout << "Reducing garbage output. nqubits: " << nqubits << ", nancillae: " << nancillae << std::endl;
-		std::cout << "Top level variable index: " << e.p->v << std::endl;
-		#endif
-		if (e.p->v < nqubits) return;
-		for(auto& edge: e.p->e)
-			reduceGarbage(edge, dd);
+	dd::Edge QuantumComputation::reduceAncillae(dd::Edge& e, std::unique_ptr<dd::Package>& dd, bool regular) {
+		// return if no more ancillaries left
+		if (!ancillary.any() || e.p == nullptr) return e;
+		unsigned short firstAncillary = 0;
+		for (auto i=0; i<ancillary.size(); ++i) {
+			if (ancillary.test(i)) {
+				firstAncillary = i;
+				break;
+			}
+		}
+		if(e.p->v < firstAncillary) return e;
 
-		#if DEBUG_MODE_QC
-		std::cout << "Actually reducing garbage output for variable index " << e.p->v << std::endl;
-		std::cout << "e[0]: " << e.p->e[0].p << std::endl;
-		std::cout << "e[1]: " << e.p->e[1].p << std::endl;
-		std::cout << "e[2]: " << e.p->e[2].p << std::endl;
-		std::cout << "e[3]: " << e.p->e[3].p << std::endl;
-		#endif
-		auto saved = e;
+		dd::Edge f = e;
 
-		auto norm0 = std::sqrt((long double)CN::mag2(e.p->e[0].w) + CN::mag2(e.p->e[2].w));
-		auto norm1 = std::sqrt((long double)CN::mag2(e.p->e[1].w) + CN::mag2(e.p->e[3].w));
-		for (auto& edge: e.p->e) {
-			if (edge.p != dd::Package::DDzero.p) {
-				edge.w = CN::ONE;
+		std::array<dd::Edge, 4> edges{ };
+		for (int i = 0; i < 4; ++i) {
+			edges[i] = reduceAncillae(f.p->e[i], dd, regular);
+		}
+		f = dd->makeNonterminal(f.p->v, edges);
+
+		// something to reduce for this qubit
+		if (ancillary.test(f.p->v)) {
+			if ((regular && (!CN::equalsZero(f.p->e[1].w) || !CN::equalsZero(f.p->e[3].w))) ||
+			    (!regular && (!CN::equalsZero(f.p->e[2].w) || !CN::equalsZero(f.p->e[3].w)))) {
+				if (regular) {
+					f = dd->makeNonterminal(f.p->v, { f.p->e[0], dd::Package::DDzero, f.p->e[2], dd::Package::DDzero });
+				} else {
+					f = dd->makeNonterminal(f.p->v, { f.p->e[0], f.p->e[1], dd::Package::DDzero, dd::Package::DDzero });
+				}
 			}
 		}
 
-		e = dd->makeNonterminal(e.p->v, { dd->add(e.p->e[0], e.p->e[2]), dd->add(e.p->e[1], e.p->e[3]), dd::Package::DDzero, dd::Package::DDzero });
-		e.p->e[0].w = dd->cn.lookup(norm0, 0);
-		e.p->e[1].w = dd->cn.lookup(norm1, 0);
-		e = dd->normalize(e, false);
-		auto c = dd->cn.mulCached(e.w, saved.w);
-		e.w = dd->cn.lookup(c);
+		auto c = dd->cn.mulCached(f.w, e.w);
+		f.w = dd->cn.lookup(c);
 		dd->cn.releaseCached(c);
-		dd->incRef(e);
-		dd->decRef(saved);
+		dd->incRef(f);
+		return f;
+	}
+
+	void QuantumComputation::reduceAncillae(dd::Edge& e, std::unique_ptr<dd::Package>& dd, const permutationMap& varMap) {
+		std::queue<dd::Edge> q{};
+		std::unordered_set<dd::NodePtr> nodes{};
+
+		q.emplace(e);
+		while (!q.empty()) {
+			auto edge = q.front();
+			q.pop();
+
+			// ancillary
+			if (varMap.at(e.p->v) >= nqubits) {
+				auto saved = edge;
+				edge = dd->makeNonterminal(edge.p->v, {edge.p->e[0], dd::Package::DDzero, edge.p->e[2], dd::Package::DDzero });
+				auto c = dd->cn.mulCached(edge.w, saved.w);
+				edge.w = dd->cn.lookup(c);
+				dd->cn.releaseCached(c);
+				dd->incRef(edge);
+				dd->decRef(saved);
+			}
+
+			for (int i=0; i<dd::NEDGE; ++i) {
+				if (dd->isTerminal(edge.p->e[i]))
+					continue;
+				if(nodes.insert(edge.p->e[i].p).second) {
+					q.push(edge.p->e[i]);
+				}
+			}
+		}
+
+		dd->garbageCollect();
+	}
+
+	dd::Edge QuantumComputation::reduceGarbage(dd::Edge& e, std::unique_ptr<dd::Package>& dd, bool regular) {
+		// return if no more garbage left
+		if (!garbage.any() || e.p == nullptr) return e;
+		unsigned short firstGarbage = 0;
+		for (auto i=0; i<garbage.size(); ++i) {
+			if (garbage.test(i)) {
+				firstGarbage = i;
+				break;
+			}
+		}
+		if(e.p->v < firstGarbage) return e;
+
+		dd::Edge f = e;
+
+		std::array<dd::Edge, 4> edges{ };
+		for (int i = 0; i < 4; ++i) {
+			edges[i] = reduceGarbage(f.p->e[i], dd, regular);
+		}
+		f = dd->makeNonterminal(f.p->v, edges);
+
+		// something to reduce for this qubit
+		if (garbage.test(f.p->v)) {
+			if ((regular && (!CN::equalsZero(f.p->e[2].w) || !CN::equalsZero(f.p->e[3].w))) ||
+			    (!regular && (!CN::equalsZero(f.p->e[1].w) || !CN::equalsZero(f.p->e[3].w)))) {
+
+				dd::Edge g{ };
+				if (regular) {
+					if (CN::equalsZero(f.p->e[0].w) && !CN::equalsZero(f.p->e[2].w)) {
+						g = f.p->e[2];
+					} else if (!CN::equalsZero(f.p->e[2].w)) {
+						g = dd->add(f.p->e[0], f.p->e[2]);
+					} else {
+						g = f.p->e[0];
+					}
+				} else {
+					if (CN::equalsZero(f.p->e[0].w) && !CN::equalsZero(f.p->e[1].w)) {
+						g = f.p->e[1];
+					} else if (!CN::equalsZero(f.p->e[1].w)) {
+						g = dd->add(f.p->e[0], f.p->e[1]);
+					} else {
+						g = f.p->e[0];
+					}
+				}
+
+				dd::Edge h{ };
+				if (regular) {
+					if (CN::equalsZero(f.p->e[1].w) && !CN::equalsZero(f.p->e[3].w)) {
+						h = f.p->e[3];
+					} else if (!CN::equalsZero(f.p->e[3].w)) {
+						h = dd->add(f.p->e[1], f.p->e[3]);
+					} else {
+						h = f.p->e[1];
+					}
+				} else {
+					if (CN::equalsZero(f.p->e[2].w) && !CN::equalsZero(f.p->e[3].w)) {
+						h = f.p->e[3];
+					} else if (!CN::equalsZero(f.p->e[3].w)) {
+						h = dd->add(f.p->e[2], f.p->e[3]);
+					} else {
+						h = f.p->e[2];
+					}
+				}
+
+				if (regular) {
+					f = dd->makeNonterminal(e.p->v, { g, h, dd::Package::DDzero, dd::Package::DDzero });
+				} else {
+					f = dd->makeNonterminal(e.p->v, { g, dd::Package::DDzero, h, dd::Package::DDzero });
+				}
+			}
+		}
+
+		auto c = dd->cn.mulCached(f.w, e.w);
+		f.w = dd->cn.lookup(c);
+		dd->cn.releaseCached(c);
+		dd->incRef(f);
+		return f;
 	}
 
 
 	dd::Edge QuantumComputation::createInitialMatrix(std::unique_ptr<dd::Package>& dd) {
 		dd::Edge e = dd->makeIdent(0, short(nqubits+nancillae-1));
 		dd->incRef(e);
-		reduceAncillae(e, dd);
+		e = reduceAncillae(e, dd);
 		return e;
 	}
 
@@ -826,16 +1210,10 @@ namespace qc {
 		std::array<short, MAX_QUBITS> line{};
 		line.fill(LINE_DEFAULT);
 		permutationMap map = initialLayout;
-
-		dd->useMatrixNormalization(true);
+		dd->setMode(dd::Matrix);
 		dd::Edge e = createInitialMatrix(dd);
-		dd->incRef(e);
 
 		for (auto & op : ops) {
-			if (!op->isUnitary()) {
-				throw QFRException("[buildFunctionality] Functionality not unitary.");
-			}
-
 			auto tmp = dd->multiply(op->getDD(dd, line, map), e);
 
 			dd->incRef(tmp);
@@ -846,61 +1224,45 @@ namespace qc {
 		}
 		// correct permutation if necessary
 		changePermutation(e, map, outputPermutation, line, dd);
-		reduceAncillae(e, dd);
-		reduceGarbage(e, dd);
+		e = reduceAncillae(e, dd);
 
-		dd->useMatrixNormalization(false);
 		return e;
 	}
 
-	dd::Edge QuantumComputation::buildFunctionality(std::unique_ptr<dd::Package>& dd, dd::DynamicReorderingStrategy strat) {
+	std::pair<dd::Edge, permutationMap> QuantumComputation::buildFunctionality(std::unique_ptr<dd::Package>& dd, dd::DynamicReorderingStrategy strat) {
 		if (nqubits + nancillae == 0)
-			return dd->DDone;
+			return {dd->DDone, permutationMap{}};
 
 		std::array<short, MAX_QUBITS> line{};
 		line.fill(LINE_DEFAULT);
 		permutationMap map = initialLayout;
+		permutationMap varMap = Operation::standardPermutation;
 
-		dd->useMatrixNormalization(true);
+		dd->setMode(dd::Matrix);
 		dd::Edge e = createInitialMatrix(dd);
-		dd->incRef(e);
-
 		for (auto & op : ops) {
 			if (!op->isUnitary()) {
 				throw QFRException("[buildFunctionality] Functionality not unitary.");
 			}
 
-			auto tmp = dd->multiply(op->getDD(dd, line, map), e);
-			// call the dynamic reordering routine
-			// TODO: currently this performs the reordering after every operation. this may be changed
-			tmp = dd->dynamicReorder(tmp, map, strat);
+			auto tmp = dd->multiply(op->getDD2(dd, line, map, varMap), e);
 
 			dd->incRef(tmp);
 			dd->decRef(e);
-			e = tmp;
 
-			dd->garbageCollect();
+			// call the dynamic reordering routine
+			// currently this performs the reordering after every operation. this may be changed
+			e = dd->dynamicReorder(tmp, varMap, strat);
 		}
 
-		// TODO: this call (probably) has to be adapted
-		// output permutation stores the expected variable mapping at the end of the computation, i.e. from which line to read which qubit
-		// if "map" does not match this particular variable mapping it has to be adapted (currently by applying swaps)
-		// however, especially when considering dynamic variable reordering one may want to avoid applying extra operations at the end
-		// accordingly one has to solve the following assignment correctly (possibly by changing the output permutation appropriately)
-		//  initial layout            end of circuit              output mapping
-		//      0: a           ->           0: u            ->          0:x
-		//      1: b           ->           1: v            ->          1:y
-		//      2: c           ->           2: w            ->          2:z
-		//                                  .
-		//                                  .
-		// correct permutation if necessary
-		changePermutation(e, map, outputPermutation, line, dd);
+		// change the tracked qubit mapping to the expected output mapping
+		changePermutation2(e, map, outputPermutation, varMap, line, dd);
+		e = dd->dynamicReorder(e, varMap, strat);
 
-		reduceAncillae(e, dd);
-		reduceGarbage(e, dd);
+		// reduce ancillae according to variable mapping
+		reduceAncillae(e, dd, varMap);
 
-		dd->useMatrixNormalization(false);
-		return e;
+		return {e, varMap};
 	}
 
 	dd::Edge QuantumComputation::simulate(const dd::Edge& in, std::unique_ptr<dd::Package>& dd) {
@@ -908,15 +1270,11 @@ namespace qc {
 		std::array<short, MAX_QUBITS> line{};
 		line.fill(LINE_DEFAULT);
 		permutationMap map = initialLayout;
-
+		dd->setMode(dd::Vector);
 		dd::Edge e = in;
 		dd->incRef(e);
 
 		for (auto& op : ops) {
-			if (!op->isUnitary()) {
-				throw QFRException("[simulate] Functionality not unitary.");
-			}
-
 			auto tmp = dd->multiply(op->getDD(dd, line, map), e);
 
 			dd->incRef(tmp);
@@ -928,19 +1286,20 @@ namespace qc {
 
 		// correct permutation if necessary
 		changePermutation(e, map, outputPermutation, line, dd);
-		reduceAncillae(e, dd);
-		reduceGarbage(e, dd);
+		e = reduceAncillae(e, dd);
 
 		return e;
 	}
 
 
-	dd::Edge QuantumComputation::simulate(const dd::Edge& in, std::unique_ptr<dd::Package>& dd, dd::DynamicReorderingStrategy strat) {
+	std::pair<dd::Edge, permutationMap> QuantumComputation::simulate(const dd::Edge& in, std::unique_ptr<dd::Package>& dd, dd::DynamicReorderingStrategy strat) {
 		// measurements are currently not supported here
 		std::array<short, MAX_QUBITS> line{};
 		line.fill(LINE_DEFAULT);
 		permutationMap map = initialLayout;
+		permutationMap varMap = Operation::standardPermutation;
 
+		dd->setMode(dd::Vector);
 		dd::Edge e = in;
 		dd->incRef(e);
 
@@ -949,37 +1308,20 @@ namespace qc {
 				throw QFRException("[simulate] Functionality not unitary.");
 			}
 
-			auto tmp = dd->multiply(op->getDD(dd, line, map), e);
-
-			// call the dynamic reordering routine
-			// TODO: currently this performs the reordering after every operation. this may be changed
-			tmp = dd->dynamicReorder(tmp, map, strat);
+			auto tmp = dd->multiply(op->getDD2(dd, line, map, varMap), e);
 
 			dd->incRef(tmp);
 			dd->decRef(e);
-			e = tmp;
-
-			dd->garbageCollect();
+			// call the dynamic reordering routine
+			// currently this performs the reordering after every operation. this may be changed
+			e = dd->dynamicReorder(tmp, varMap, strat);
 		}
 
-		// TODO: this call (probably) has to be adapted
-		// output permutation stores the expected variable mapping at the end of the computation, i.e. from which line to read which qubit
-		// if "map" does not match this particular variable mapping it has to be adapted (currently by applying swaps)
-		// however, especially when considering dynamic variable reordering one may want to avoid applying extra operations at the end
-		// accordingly one has to solve the following assignment correctly (possibly by changing the output permutation appropriately)
-		//  initial layout            end of circuit              output mapping
-		//      0: a           ->           0: u            ->          0:x
-		//      1: b           ->           1: v            ->          1:y
-		//      2: c           ->           2: w            ->          2:z
-		//                                  .
-		//                                  .
-		// correct permutation if necessary
-		changePermutation(e, map, outputPermutation, line, dd);
+		// change the tracked qubit mapping to the expected output mapping
+		changePermutation2(e, map, outputPermutation, varMap, line, dd);
+		e = dd->dynamicReorder(e, varMap, strat);
 
-		reduceAncillae(e, dd);
-		reduceGarbage(e, dd);
-
-		return e;
+		return {e, varMap};
 	}
 
 	void QuantumComputation::create_reg_array(const registerMap& regs, regnames_t& regnames, unsigned short defaultnumber, const char* defaultname) {
@@ -987,10 +1329,16 @@ namespace qc {
 
 		std::stringstream ss;
 		if(!regs.empty()) {
-			for(const auto& reg: regs) {
-				for(unsigned short i = 0; i < reg.second.second; i++) {
-					ss << reg.first << "[" << i << "]";
-					regnames.push_back(std::make_pair(reg.first, ss.str()));
+			// sort regs by start index
+			std::map<unsigned short, std::pair<std::string, reg>> sortedRegs{};
+			for (const auto& reg: regs) {
+				sortedRegs.insert({reg.second.first, reg});
+			}
+
+			for(const auto& reg: sortedRegs) {
+				for(unsigned short i = 0; i < reg.second.second.second; i++) {
+					ss << reg.second.first << "[" << i << "]";
+					regnames.push_back(std::make_pair(reg.second.first, ss.str()));
 					ss.str(std::string());
 				}
 			}
@@ -1006,7 +1354,10 @@ namespace qc {
 	std::ostream& QuantumComputation::print(std::ostream& os) const {
 		os << std::setw((int)std::log10(ops.size())+1) << "i" << ": \t\t\t";
 		for (const auto& Q: initialLayout) {
-			os << Q.second << "\t";
+			if (ancillary.test(Q.second))
+				os << "\033[31m" << Q.second << "\t\033[0m";
+			else
+				os << Q.second << "\t";
 		}
 		/*for (unsigned short i = 0; i < nqubits + nancillae; ++i) {
 			auto it = initialLayout.find(i);
@@ -1027,7 +1378,10 @@ namespace qc {
 		for(const auto& physical_qubit: initialLayout) {
 			auto it = outputPermutation.find(physical_qubit.first);
 			if(it == outputPermutation.end()) {
-				os << "|\t";
+				if (garbage.test(physical_qubit.second))
+					os << "\033[31m|\t\033[0m";
+				else
+					os << "|\t";
 			} else {
 				os << it->second << "\t";
 			}
@@ -1046,7 +1400,7 @@ namespace qc {
 			unsigned short col = (j >> initialLayout.at(e.p->v)) & 1u;
 			e = e.p->e[dd::RADIX * row + col];
 			CN::mul(c, c, e.w);
-		} while (!dd->isTerminal(e));
+		} while (!dd::Package::isTerminal(e));
 		return c;
 	}
 
@@ -1105,72 +1459,128 @@ namespace qc {
 		}
 	}
 
+	void QuantumComputation::consolidateRegister(registerMap& regs) {
+		bool finished = false;
+		while (!finished) {
+			for (const auto& qreg: regs) {
+				finished = true;
+				auto regname = qreg.first;
+				// check if lower part of register
+				if (regname.length() > 2 && regname.compare(regname.size() - 2, 2, "_l") == 0) {
+					auto lowidx = qreg.second.first;
+					auto lownum = qreg.second.second;
+					// search for higher part of register
+					auto highname = regname.substr(0, regname.size() - 1) + 'h';
+					auto it = regs.find(highname);
+					if (it != regs.end()) {
+						auto highidx = it->second.first;
+						auto highnum = it->second.second;
+						// fusion of registers possible
+						if (lowidx+lownum == highidx){
+							finished = false;
+							auto targetname = regname.substr(0, regname.size() - 2);
+							auto targetidx = lowidx;
+							auto targetnum = lownum + highnum;
+							regs.insert({ targetname, { targetidx, targetnum }});
+							regs.erase(regname);
+							regs.erase(highname);
+						}
+					}
+					break;
+				}
+			}
+		}
+	}
+
+	void QuantumComputation::dumpOpenQASM(std::ostream& of) {
+		// Add missing physical qubits
+		if(!qregs.empty()) {
+			for (unsigned short physical_qubit=0; physical_qubit < initialLayout.rbegin()->first; ++physical_qubit) {
+				if (! initialLayout.count(physical_qubit)) {
+					auto logicalQubit = getHighestLogicalQubitIndex()+1;
+					addQubit(logicalQubit, physical_qubit, -1);
+				}
+			}
+		}
+
+		// dump initial layout and output permutation
+		permutationMap inverseInitialLayout {};
+		for (const auto& q: initialLayout)
+			inverseInitialLayout.insert({q.second, q.first});
+		of << "// i";
+		for (const auto& q: inverseInitialLayout) {
+			of << " " << q.second;
+		}
+		of << std::endl;
+
+		permutationMap inverseOutputPermutation {};
+		for (const auto& q: outputPermutation) {
+			inverseOutputPermutation.insert({q.second, q.first});
+		}
+		of << "// o";
+		for (const auto& q: inverseOutputPermutation) {
+			of << " " << q.second;
+		}
+		of << std::endl;
+
+		of << "OPENQASM 2.0;"                << std::endl;
+		of << "include \"qelib1.inc\";"      << std::endl;
+		if (!qregs.empty()){
+			printSortedRegisters(qregs, "qreg", of);
+		} else if (nqubits > 0) {
+			of << "qreg " << DEFAULT_QREG << "[" << nqubits   << "];" << std::endl;
+		}
+		if(!cregs.empty()) {
+			printSortedRegisters(cregs, "creg", of);
+		} else if (nclassics > 0) {
+			of << "creg " << DEFAULT_CREG << "[" << nclassics << "];" << std::endl;
+		}
+		if(!ancregs.empty()) {
+			printSortedRegisters(ancregs, "qreg", of);
+		} else if (nancillae > 0) {
+			of << "qreg " << DEFAULT_ANCREG << "[" << nancillae << "];" << std::endl;
+		}
+
+		regnames_t qregnames{};
+		regnames_t cregnames{};
+		regnames_t ancregnames{};
+		create_reg_array(qregs, qregnames, nqubits, DEFAULT_QREG);
+		create_reg_array(cregs, cregnames, nclassics, DEFAULT_CREG);
+		create_reg_array(ancregs, ancregnames, nancillae, DEFAULT_ANCREG);
+
+		for (auto& ancregname: ancregnames)
+			qregnames.push_back(ancregname);
+
+		for (const auto& op: ops) {
+			op->dumpOpenQASM(of, qregnames, cregnames);
+		}
+	}
+
+	void QuantumComputation::printSortedRegisters(const registerMap& regmap, const std::string& identifier, std::ostream& of) {
+		// sort regs by start index
+		std::map<unsigned short, std::pair<std::string, reg>> sortedRegs{};
+		for (const auto& reg: regmap) {
+			sortedRegs.insert({reg.second.first, reg});
+		}
+
+		for (auto const& reg : sortedRegs) {
+			of << identifier << " " << reg.second.first << "[" << reg.second.second.second << "];" << std::endl;
+		}
+	}
+
 	void QuantumComputation::dump(const std::string& filename, Format format) {
 		auto of = std::ofstream(filename);
 		if (!of.good()) {
 			throw QFRException("[dump] Error opening file: " + filename);
 		}
+		dump(of, format);
+	}
+
+	void QuantumComputation::dump(std::ostream&& of, Format format) {
 
 		switch(format) {
-			case  OpenQASM: {
-					// dump initial layout and output permutation
-					permutationMap inverseInitialLayout {};
-					for (const auto& q: initialLayout)
-						inverseInitialLayout.insert({q.second, q.first});
-					of << "// i";
-					for (const auto& q: inverseInitialLayout) {
-						of << " " << q.second;
-					}
-					of << std::endl;
-
-					permutationMap inverseOutputPermutation {};
-					for (const auto& q: outputPermutation) {
-						inverseOutputPermutation.insert({q.second, q.first});
-					}
-					of << "// o";
-					for (const auto& q: inverseOutputPermutation) {
-						of << " " << q.second;
-					}
-					of << std::endl;
-
-					of << "OPENQASM 2.0;"                << std::endl;
-					of << "include \"qelib1.inc\";"      << std::endl;
-					if(!qregs.empty()) {
-						for (auto const& qreg : qregs) {
-							of << "qreg " << qreg.first << "[" << qreg.second.second << "];" << std::endl;
-						}
-					} else if (nqubits > 0) {
-						of << "qreg " << DEFAULT_QREG << "[" << nqubits   << "];" << std::endl;
-					}
-					if(!cregs.empty()) {
-						for (auto const& creg : cregs) {
-							of << "creg " << creg.first << "[" << creg.second.second << "];" << std::endl;
-						}
-					} else if (nclassics > 0) {
-						of << "creg " << DEFAULT_CREG << "[" << nclassics << "];" << std::endl;
-					}
-					if(!ancregs.empty()) {
-						for (auto const& ancreg : ancregs) {
-							of << "qreg " << ancreg.first << "[" << ancreg.second.second << "];" << std::endl;
-						}
-					} else if (nancillae > 0) {
-						of << "qreg " << DEFAULT_ANCREG << "[" << nancillae << "];" << std::endl;
-					}
-
-					regnames_t qregnames{};
-					regnames_t cregnames{};
-					regnames_t ancregnames{};
-
-					create_reg_array(qregs, qregnames, nqubits, DEFAULT_QREG);
-					create_reg_array(cregs, cregnames, nclassics, DEFAULT_CREG);
-					create_reg_array(ancregs, ancregnames, nancillae, DEFAULT_ANCREG);
-					for (auto& ancregname: ancregnames)
-						qregnames.push_back(ancregname);
-
-					for (const auto& op: ops) {
-						op->dumpOpenQASM(of, qregnames, cregnames);
-					}
-				}
+			case  OpenQASM:
+				dumpOpenQASM(of);
 				break;
 			case Real:
 				std::cerr << "Dumping in real format currently not supported\n";
@@ -1178,7 +1588,11 @@ namespace qc {
 			case GRCS:
 				std::cerr << "Dumping in GRCS format currently not supported\n";
 				break;
+			case TFC:
+				std::cerr << "Dumping in TFC format currently not supported\n";
+				break;
 			case Qiskit:
+				// TODO: improve/modernize Qiskit dump
 				unsigned short totalQubits = nqubits + nancillae + (max_controls >= 2? max_controls-2: 0);
 				if (totalQubits > 53) {
 					std::cerr << "No more than 53 total qubits are currently supported" << std::endl;
@@ -1256,7 +1670,7 @@ namespace qc {
 				of << "layout = qc_transpiled._layout" << std::endl;
 				of << "virtual_bits = layout.get_virtual_bits()" << std::endl;
 
-				of << "f = open(\"" << filename.substr(0, filename.size()-3) << R"(_transpiled.qasm", "w"))" << std::endl;
+				of << "f = open(\"circuit" << R"(_transpiled.qasm", "w"))" << std::endl;
 				of << R"(f.write("// i"))" << std::endl;
 				of << "for qubit in " << DEFAULT_QREG << ":" << std::endl;
 				of << '\t' << R"(f.write(" " + str(virtual_bits[qubit])))" << std::endl;
@@ -1289,9 +1703,9 @@ namespace qc {
 		}
 	}
 
-	bool QuantumComputation::isIdleQubit(unsigned short i) {
+	bool QuantumComputation::isIdleQubit(unsigned short physical_qubit) {
 		for(const auto& op:ops) {
-			if (op->actsOn(i))
+			if (op->actsOn(physical_qubit))
 				return false;
 		}
 		return true;
@@ -1418,6 +1832,74 @@ namespace qc {
 
 	}
 
+	void QuantumComputation::changePermutation2(dd::Edge& on, qc::permutationMap& from, const qc::permutationMap& to, const qc::permutationMap& varMap, std::array<short, qc::MAX_QUBITS>& line, std::unique_ptr<dd::Package>& dd, bool regular) {
+		assert(from.size() >= to.size());
+
+		#if DEBUG_MODE_QC
+		std::cout << "Trying to change: " << std::endl;
+		printPermutationMap(from);
+		std::cout << "to: " << std::endl;
+		printPermutationMap(to);
+		#endif
+
+		auto n = (short)(on.p->v + 1);
+
+		// iterate over (k,v) pairs of second permutation
+		for (const auto& kv: to) {
+			unsigned short i = kv.first;
+			unsigned short goal = kv.second;
+
+			// search for key in the first map
+			auto it = from.find(i);
+			if (it == from.end()) {
+				throw QFRException("[changePermutation] Key " + std::to_string(it->first) + " was not found in first permutation. This should never happen.");
+			}
+			unsigned short current = it->second;
+
+			// permutations agree for this key value
+			if(current == goal) continue;
+
+			// search for goal value in first permutation
+			unsigned short j = 0;
+			for(const auto& pair: from) {
+				unsigned short value = pair.second;
+				if (value == goal) {
+					j = pair.first;
+					break;
+				}
+			}
+
+			// swap i and j
+			auto op = qc::StandardOperation(n, {varMap.at(i), varMap.at(j)}, qc::SWAP);
+
+			#if DEBUG_MODE_QC
+			std::cout << "Apply SWAP: " << i << " " << j << std::endl;
+			#endif
+
+			op.setLine2(line, from, varMap);
+			auto saved = on;
+			if (regular) {
+				on = dd->multiply(op.getSWAPDD2(dd, line, from, varMap), on);
+			} else {
+				on = dd->multiply(on, op.getSWAPDD2(dd, line, from, varMap));
+			}
+			op.resetLine2(line, from, varMap);
+			dd->incRef(on);
+			dd->decRef(saved);
+			dd->garbageCollect();
+
+			// update permutation
+			from.at(i) = goal;
+			from.at(j) = current;
+
+			#if DEBUG_MODE_QC
+			std::cout << "Changed permutation" << std::endl;
+			printPermutationMap(from);
+			#endif
+		}
+
+	}
+
 
 	std::string QuantumComputation::getQubitRegister(unsigned short physical_qubit_index) {
 
@@ -1452,6 +1934,29 @@ namespace qc {
 			}
 			// no else branch needed here, since error would have already shown in getQubitRegister(physical_qubit_index)
 		}
+		return {reg_name, index};
+	}
+
+	std::string QuantumComputation::getClassicalRegister(unsigned short classical_index) {
+
+		for (const auto& reg:cregs) {
+			unsigned short start_idx = reg.second.first;
+			unsigned short count = reg.second.second;
+			if (classical_index < start_idx) continue;
+			if (classical_index >= start_idx + count) continue;
+			return reg.first;
+		}
+
+		throw QFRException("[getClassicalRegister] Classical index " + std::to_string(classical_index) + " not found in any register");
+	}
+
+	std::pair<std::string, unsigned short> QuantumComputation::getClassicalRegisterAndIndex(unsigned short classical_index) {
+		std::string reg_name = getClassicalRegister(classical_index);
+		unsigned short index = 0;
+		auto it = cregs.find(reg_name);
+		if (it != cregs.end()) {
+			index = classical_index - it->second.first;
+		} // else branch not needed since getClassicalRegister already covers this case
 		return {reg_name, index};
 	}
 
@@ -1495,18 +2000,34 @@ namespace qc {
 			 */
 			if(line.rfind("//", 0) == 0) {
 				if (line.find('i') != std::string::npos) {
-					unsigned short i = 0;
+					unsigned short physical_qubit = 0;
 					auto ss = std::stringstream(line.substr(4));
-					for (unsigned short j=0; j < getNqubits(); ++j) {
-						if (!(ss >> i)) return false;
-						initialLayout.insert({i, j});
+					for (unsigned short logical_qubit=0; logical_qubit < getNqubits(); ++logical_qubit) {
+						if (!(ss >> physical_qubit)) return false;
+						initialLayout.insert({physical_qubit, logical_qubit});
 					}
 				} else if (line.find('o') != std::string::npos) {
-					unsigned short j = 0;
+					unsigned short physical_qubit = 0;
 					auto ss = std::stringstream(line.substr(4));
-					for (unsigned short i=0; i < getNqubits(); ++i) {
-						if (!(ss >> j)) return true; // allow for incomplete output permutation
-						outputPermutation.insert({j, i});
+					for (unsigned short logical_qubit=0; logical_qubit < getNqubits(); ++logical_qubit) {
+						if (!(ss >> physical_qubit)) {
+							// allow for incomplete output permutation
+							// mark rest as garbage
+							for (const auto& in: initialLayout) {
+								bool isOutput = false;
+								for (const auto& out: outputPermutation) {
+									if (in.second == out.second) {
+										isOutput = true;
+										break;
+									}
+								}
+								if (!isOutput) {
+									setLogicalQubitGarbage(in.second);
+								}
+							}
+							return true;
+						}
+						outputPermutation.insert({physical_qubit, logical_qubit});
 					}
 					return true;
 				}
@@ -1515,96 +2036,9 @@ namespace qc {
 		return false;
 	}
 
-	void QuantumComputation::fuseCXtoSwap() {
-		// search for
-		//      cx a b
-		//      cx b a      (could also be mct ... b a in general)
-		//      cx a b
-		for (auto it=ops.begin(); it != ops.end(); ++it ) {
-			auto op0 = dynamic_cast<StandardOperation*>((*it).get());
-			if (op0) {
-				// search for CX a b
-				if (op0->getGate() == X &&
-				    op0->getControls().size() == 1 &&
-				    op0->getControls().at(0).type == Control::pos) {
-
-					unsigned short control = op0->getControls().at(0).qubit;
-					assert(op0->getTargets().size() == 1);
-					unsigned short target = op0->getTargets().at(0);
-
-					auto it1 = it;
-					it1++;
-					if(it1 != ops.end()) {
-						auto op1 = dynamic_cast<StandardOperation*>((*it1).get());
-						if (op1) {
-							// search for CX b a (or mct ... b a)
-							if (op1->getGate() == X &&
-							    op1->getTargets().at(0) == control &&
-							    std::any_of(op1->getControls().begin(), op1->getControls().end(), [target](qc::Control c)  -> bool {return c.qubit == target;})) {
-								assert(op1->getTargets().size() == 1);
-
-								auto it2 = it1;
-								it2++;
-								if (it2 != ops.end()) {
-									auto op2 = dynamic_cast<StandardOperation*>((*it2).get());
-									if (op2) {
-										// search for CX a b
-										if (op2->getGate() == X &&
-										    op2->getTargets().at(0) == target &&
-										    op2->getControls().size() == 1 &&
-										    op2->getControls().at(0).qubit == control) {
-
-											assert(op2->getTargets().size() == 1);
-
-											op0->setGate(SWAP);
-											op0->setTargets({target, control});
-											op0->setControls({});
-											for (const auto& c: op1->getControls()) {
-												if (c.qubit != target)
-													op0->getControls().push_back(c);
-											}
-											ops.erase(it2);
-											ops.erase(it1);
-										} else {
-											//continue;
-											// try replacing
-											//  CX a b
-											//  CX b a
-											// with
-											//  SWAP a b
-											//  CX   a b
-											// in order to enable more efficient swap reduction
-											if(op1->getControls().size() != 1) continue;
-
-											op0->setGate(SWAP);
-											op0->setTargets({target, control});
-											op0->setControls({});
-
-											op1->setTargets({target});
-											op1->setControls({Control(control)});
-										}
-									}
-								} else {
-									if(op1->getControls().size() != 1) continue;
-
-									op0->setGate(SWAP);
-									op0->setTargets({target, control});
-									op0->setControls({});
-
-									op1->setTargets({target});
-									op1->setControls({Control(control)});
-								}
-							}
-						}
-					}
-				}
-			}
-		}
-	}
-
-	unsigned short QuantumComputation::getHighestLogicalQubitIndex() {
+	unsigned short QuantumComputation::getHighestLogicalQubitIndex(const permutationMap& map) {
 		unsigned short max_index = 0;
-		for (const auto& physical_qubit: initialLayout) {
+		for (const auto& physical_qubit: map) {
 			if (physical_qubit.second > max_index) {
 				max_index = physical_qubit.second;
 			}
@@ -1612,11 +2046,7 @@ namespace qc {
 		return max_index;
 	}
 
-	bool QuantumComputation::isAncilla(unsigned short i) {
-		for (const auto& ancreg: ancregs) {
-			if (ancreg.second.first <= i && i < ancreg.second.first+ancreg.second.second)
-				return true;
-		}
-		return false;
+	bool QuantumComputation::physicalQubitIsAncillary(unsigned short physical_qubit_index) {
+		return std::any_of(ancregs.begin(), ancregs.end(), [&physical_qubit_index](registerMap::value_type& ancreg) { return ancreg.second.first <= physical_qubit_index && physical_qubit_index < ancreg.second.first + ancreg.second.second; });
 	}
 }

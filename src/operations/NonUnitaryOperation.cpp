@@ -23,12 +23,12 @@ namespace qc {
 		parameter[0] = n;
 	}	
 
-	// Snapshot constructor
-	NonUnitaryOperation::NonUnitaryOperation(const unsigned short nq, const std::vector<unsigned short>& qubitRegister, Op op) {
-		this->op = op;
+	// General constructor
+	NonUnitaryOperation::NonUnitaryOperation(const unsigned short nq, const std::vector<unsigned short>& qubitRegister, OpType op) {
+		type = op;
 		nqubits  = nq;
 		targets  = qubitRegister;
-		std::strcpy(name, opNames[op].c_str());
+		Operation::setName();
 	}
 
     std::ostream& NonUnitaryOperation::print(std::ostream& os) const {
@@ -39,9 +39,9 @@ namespace qc {
 		std::array<short, MAX_QUBITS> line{};
 		line.fill(LINE_DEFAULT);
 
-		switch (op) {
+		switch (type) {
 			case Measure:
-				os << "Meas\t";
+				os << name << "\t";
 				for (unsigned int q = 0; q < controls.size(); ++q) {
 					line[permutation.at(controls[q].qubit)] = targets[q];
 				}
@@ -54,8 +54,11 @@ namespace qc {
 				}
 				break;
 			case Reset:
-				os << "Rst \t";
-				setLine(line, permutation);
+				os << name << "\t";
+				for (const auto& t: targets) {
+					if (permutation.find(t) != permutation.end())
+						line[permutation.at(t)] = LINE_TARGET;
+				}
 				for (int i = 0; i < nqubits; ++i) {
 					if (line[i] == LINE_TARGET) {
 						os << "\033[31m" << "r\t" << "\033[0m";
@@ -65,8 +68,11 @@ namespace qc {
 				}
 				break;
 			case Snapshot:
-				os << "Snap\t";
-				setLine(line, permutation);
+				os << name << "\t";
+				for (const auto& t: targets) {
+					if (permutation.find(t) != permutation.end())
+						line[permutation.at(t)] = LINE_TARGET;
+				}
 				for (int i = 0; i < nqubits; ++i) {
 					if (line[i] == LINE_TARGET) {
 						os << "\033[33m" << "s\t" << "\033[0m";
@@ -77,11 +83,14 @@ namespace qc {
 				os << "\tp: (" << targets.size() << ") (" << parameter[1] << ")";
 				break;
 			case ShowProbabilities:
-				os << "Show probabilities";
+				os << name;
 				break;
 			case Barrier:
-				os << "Barr\t";
-				setLine(line, permutation);
+				os << name << "\t";
+				for (const auto& t: targets) {
+					if (permutation.find(t) != permutation.end())
+						line[permutation.at(t)] = LINE_TARGET;
+				}
 				for (int i = 0; i < nqubits; ++i) {
 					if (line[i] == LINE_TARGET) {
 						os << "\033[32m" << "b\t" << "\033[0m";
@@ -90,12 +99,15 @@ namespace qc {
 					}
 				}
 				break;
+			default:
+				std::cerr << "Non-unitary operation with invalid type " << type << " detected. Proceed with caution!" << std::endl;
+				break;
 		}
 		return os;
 	}
 
-	void NonUnitaryOperation::dumpOpenQASM(std::ofstream& of, const regnames_t& qreg, const regnames_t& creg) const {
-		switch (op) {
+	void NonUnitaryOperation::dumpOpenQASM(std::ostream& of, const regnames_t& qreg, const regnames_t& creg) const {
+		switch (type) {
 			case Measure: 
 				if(isWholeQubitRegister(qreg, controls[0].qubit, controls.back().qubit) && 
 				   isWholeQubitRegister(qreg, targets[0],        targets.back())) {
@@ -136,15 +148,18 @@ namespace qc {
 					of << "barrier " << qreg[targets[0]].first << ";" << std::endl;
 				} else {
 					for (auto target: targets) {
-						of << "barrier " << qreg[target].first << ";" << std::endl;
+						of << "barrier " << qreg[target].second << ";" << std::endl;
 					}
 				}
+				break;
+			default:
+				std::cerr << "Non-unitary operation with invalid type " << type << " detected. Proceed with caution!" << std::endl;
 				break;
 		}
 	}
 
-	void NonUnitaryOperation::dumpQiskit(std::ofstream& of, const regnames_t& qreg, const regnames_t& creg, const char *) const {
-		switch (op) {
+	void NonUnitaryOperation::dumpQiskit(std::ostream& of, const regnames_t& qreg, const regnames_t& creg, const char *) const {
+		switch (type) {
 			case Measure:
 				if(isWholeQubitRegister(qreg, controls[0].qubit, controls.back().qubit) &&
 				   isWholeQubitRegister(qreg, targets[0],        targets.back())) {
@@ -195,6 +210,52 @@ namespace qc {
 					of << "])" << std::endl;
 				}
 				break;
+			default:
+				std::cerr << "Non-unitary operation with invalid type " << type << " detected. Proceed with caution!" << std::endl;
+				break;
 		}
+	}
+
+	dd::Edge NonUnitaryOperation::getDD(std::unique_ptr<dd::Package>& dd, std::array<short, MAX_QUBITS>& line) const {
+		// these operations do not alter the current state
+		if (type == ShowProbabilities || type == Barrier || type == Snapshot) {
+			return dd->makeIdent(0, static_cast<short>(nqubits-1));
+		}
+
+		throw QFRException("DD for non-unitary operation not available!");
+	}
+
+	dd::Edge NonUnitaryOperation::getDD(std::unique_ptr<dd::Package>& dd, std::array<short, MAX_QUBITS>& line, std::map<unsigned short, unsigned short>& perm) const {
+		// these operations do not alter the current state
+		if (type == ShowProbabilities || type == Barrier || type == Snapshot) {
+			return dd->makeIdent(0, static_cast<short>(nqubits-1));
+		}
+
+		throw QFRException("DD for non-unitary operation not available!");
+	}
+
+	dd::Edge NonUnitaryOperation::getInverseDD(std::unique_ptr<dd::Package>& dd, std::array<short, MAX_QUBITS>& line ) const {
+		// these operations do not alter the current state
+		if (type == ShowProbabilities || type == Barrier || type == Snapshot) {
+			return dd->makeIdent(0, static_cast<short>(nqubits-1));
+		}
+
+		throw QFRException("Non-unitary operation is not reversible! No inverse DD is available.");
+	}
+
+	bool NonUnitaryOperation::actsOn(unsigned short i) {
+		return false; // non-unitary operations on idle qubits may be ignored. as such they do not "act" on the qubits
+//		if (type != Measure) {
+//			for (const auto t:targets) {
+//				if (t == i)
+//					return true;
+//			}
+//		} else {
+//			for (const auto c:controls) {
+//				if (c.qubit == i)
+//					return true;
+//			}
+//		}
+//		return false;
 	}
 }

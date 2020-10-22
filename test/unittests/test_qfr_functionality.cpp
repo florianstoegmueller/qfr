@@ -7,6 +7,7 @@
 #include <random>
 
 #include "QuantumComputation.hpp"
+#include "CircuitOptimizer.hpp"
 
 using namespace qc;
 
@@ -40,12 +41,12 @@ TEST_F(QFRFunctionality, fuse_cx_to_swap) {
 	qc.emplace_back<StandardOperation>(nqubits, Control(0), 1, X);
 	qc.emplace_back<StandardOperation>(nqubits, Control(1), 0, X);
 	qc.emplace_back<StandardOperation>(nqubits, Control(0), 1, X);
-	qc.fuseCXtoSwap();
+	CircuitOptimizer::swapGateFusion(qc);
 	ASSERT_NO_THROW({
 		auto op = dynamic_cast<StandardOperation*>((qc.begin()->get()));
-        EXPECT_EQ(op->getGate(), SWAP);
-        EXPECT_EQ(op->getTargets().at(0), 1);
-        EXPECT_EQ(op->getTargets().at(1), 0);
+        EXPECT_EQ(op->getType(), SWAP);
+        EXPECT_EQ(op->getTargets().at(0), 0);
+        EXPECT_EQ(op->getTargets().at(1), 1);
 	});
 }
 
@@ -54,18 +55,18 @@ TEST_F(QFRFunctionality, replace_cx_to_swap_at_end) {
 	QuantumComputation qc(nqubits);
 	qc.emplace_back<StandardOperation>(nqubits, Control(0), 1, X);
 	qc.emplace_back<StandardOperation>(nqubits, Control(1), 0, X);
-	qc.fuseCXtoSwap();
+	CircuitOptimizer::swapGateFusion(qc);
 	auto it = qc.begin();
 	ASSERT_NO_THROW({
 		                auto op = dynamic_cast<StandardOperation*>(it->get());
-		                EXPECT_EQ(op->getGate(), SWAP);
-		                EXPECT_EQ(op->getTargets().at(0), 1);
-		                EXPECT_EQ(op->getTargets().at(1), 0);
+		                EXPECT_EQ(op->getType(), SWAP);
+		                EXPECT_EQ(op->getTargets().at(0), 0);
+		                EXPECT_EQ(op->getTargets().at(1), 1);
 	                });
 	++it;
 	ASSERT_NO_THROW({
 		                auto op = dynamic_cast<StandardOperation*>(it->get());
-		                EXPECT_EQ(op->getGate(), X);
+		                EXPECT_EQ(op->getType(), X);
 		                EXPECT_EQ(op->getControls().at(0).qubit, 0);
 		                EXPECT_EQ(op->getTargets().at(0), 1);
 	                });
@@ -77,18 +78,18 @@ TEST_F(QFRFunctionality, replace_cx_to_swap) {
 	qc.emplace_back<StandardOperation>(nqubits, Control(0), 1, X);
 	qc.emplace_back<StandardOperation>(nqubits, Control(1), 0, X);
 	qc.emplace_back<StandardOperation>(nqubits, 0, H);
-	qc.fuseCXtoSwap();
+	CircuitOptimizer::swapGateFusion(qc);
 	auto it = qc.begin();
 	ASSERT_NO_THROW({
 		                auto op = dynamic_cast<StandardOperation*>(it->get());
-		                EXPECT_EQ(op->getGate(), SWAP);
-		                EXPECT_EQ(op->getTargets().at(0), 1);
-		                EXPECT_EQ(op->getTargets().at(1), 0);
+		                EXPECT_EQ(op->getType(), SWAP);
+		                EXPECT_EQ(op->getTargets().at(0), 0);
+		                EXPECT_EQ(op->getTargets().at(1), 1);
 	                });
 	++it;
 	ASSERT_NO_THROW({
 		                auto op = dynamic_cast<StandardOperation*>(it->get());
-		                EXPECT_EQ(op->getGate(), X);
+		                EXPECT_EQ(op->getType(), X);
 		                EXPECT_EQ(op->getControls().at(0).qubit, 0);
 		                EXPECT_EQ(op->getTargets().at(0), 1);
 	                });
@@ -138,8 +139,8 @@ TEST_F(QFRFunctionality, ancillary_qubit_at_end) {
 	EXPECT_TRUE(dd->equals(e.p->e[3], dd->DDzero));
 	auto f = dd->makeIdent(0, (short)nqubits);
 	dd->incRef(f);
-	qc.reduceAncillae(f, dd);
-	qc.reduceGarbage(f, dd);
+	f = qc.reduceAncillae(f, dd);
+	f = qc.reduceGarbage(f, dd);
 	EXPECT_TRUE(dd->equals(e, f));
 	qc.printRegisters();
 	auto p = qc.removeQubit(2);
@@ -179,7 +180,7 @@ TEST_F(QFRFunctionality, ancillary_qubit_at_end) {
 	EXPECT_EQ(qc.getNqubits(), 0);
 	EXPECT_TRUE(qc.getQregs().empty());
 	qc.printRegisters();
-	qc.printStatistics();
+	qc.printStatistics(std::cout);
 }
 
 TEST_F(QFRFunctionality, ancillary_qubit_remove_middle) {
@@ -207,4 +208,112 @@ TEST_F(QFRFunctionality, split_qreg) {
 	EXPECT_EQ(qc.getNqubitsWithoutAncillae(), 2);
 	EXPECT_EQ(qc.getNqubits(), 2);
 	qc.printRegisters();
+}
+
+TEST_F(QFRFunctionality, FuseTwoSingleQubitGates) {
+	unsigned short nqubits = 1;
+	QuantumComputation qc(nqubits);
+	auto dd = std::make_unique<dd::Package>();
+	qc.emplace_back<StandardOperation>(nqubits, 0, X);
+	qc.emplace_back<StandardOperation>(nqubits, 0, H);
+
+	qc.print(std::cout);
+	dd::Edge e = qc.buildFunctionality(dd);
+	CircuitOptimizer::singleGateFusion(qc);
+	dd::Edge f = qc.buildFunctionality(dd);
+	std::cout << "-----------------------------" << std::endl;
+	qc.print(std::cout);
+	EXPECT_EQ(qc.getNops(), 1);
+	EXPECT_TRUE(dd::Package::equals(e, f));
+}
+
+TEST_F(QFRFunctionality, FuseThreeSingleQubitGates) {
+	unsigned short nqubits = 1;
+	QuantumComputation qc(nqubits);
+	auto dd = std::make_unique<dd::Package>();
+	qc.emplace_back<StandardOperation>(nqubits, 0, X);
+	qc.emplace_back<StandardOperation>(nqubits, 0, H);
+	qc.emplace_back<StandardOperation>(nqubits, 0, Y);
+
+	dd::Edge e = qc.buildFunctionality(dd);
+	std::cout << "-----------------------------" << std::endl;
+	qc.print(std::cout);
+	CircuitOptimizer::singleGateFusion(qc);
+	dd::Edge f = qc.buildFunctionality(dd);
+	std::cout << "-----------------------------" << std::endl;
+	qc.print(std::cout);
+	EXPECT_EQ(qc.getNops(), 1);
+	EXPECT_TRUE(dd::Package::equals(e, f));
+}
+
+TEST_F(QFRFunctionality, FuseNoSingleQubitGates) {
+	unsigned short nqubits = 2;
+	QuantumComputation qc(nqubits);
+	auto dd = std::make_unique<dd::Package>();
+	qc.emplace_back<StandardOperation>(nqubits, 0, H);
+	qc.emplace_back<StandardOperation>(nqubits, qc::Control(0), 1, X);
+	qc.emplace_back<StandardOperation>(nqubits, 0, Y);
+	dd::Edge e = qc.buildFunctionality(dd);
+	std::cout << "-----------------------------" << std::endl;
+	qc.print(std::cout);
+	CircuitOptimizer::singleGateFusion(qc);
+	dd::Edge f = qc.buildFunctionality(dd);
+	std::cout << "-----------------------------" << std::endl;
+	qc.print(std::cout);
+	EXPECT_EQ(qc.getNops(), 3);
+	EXPECT_TRUE(dd::Package::equals(e, f));
+}
+
+TEST_F(QFRFunctionality, FuseSingleQubitGatesAcrossOtherGates) {
+	unsigned short nqubits = 2;
+	QuantumComputation qc(nqubits);
+	auto dd = std::make_unique<dd::Package>();
+	qc.emplace_back<StandardOperation>(nqubits, 0, H);
+	qc.emplace_back<StandardOperation>(nqubits, 1, Z);
+	qc.emplace_back<StandardOperation>(nqubits, 0, Y);
+	auto e = qc.buildFunctionality(dd);
+	std::cout << "-----------------------------" << std::endl;
+	qc.print(std::cout);
+	CircuitOptimizer::singleGateFusion(qc);
+	auto f = qc.buildFunctionality(dd);
+	std::cout << "-----------------------------" << std::endl;
+	qc.print(std::cout);
+	EXPECT_EQ(qc.getNops(), 2);
+	EXPECT_TRUE(dd::Package::equals(e, f));
+}
+
+TEST_F(QFRFunctionality, StripIdleAndDump) {
+	std::stringstream ss{};
+	auto testfile =
+	                "OPENQASM 2.0;\n"
+	                "include \"qelib1.inc\";\n"
+	                "qreg q[5];\n"
+	                "creg c[3];\n"
+	                "x q[0];\n"
+	                "x q[2];\n"
+				    "barrier q;\n"
+	                "barrier q[0];\n"
+	                "reset q;\n"
+	                "reset q[2];\n"
+	                "cx q[0],q[4];\n";
+
+	ss << testfile;
+	auto qc = qc::QuantumComputation();
+	qc.import(ss, qc::OpenQASM);
+	qc.print(std::cout);
+	qc.stripIdleQubits();
+	qc.print(std::cout);
+	std::stringstream goal{};
+	qc.print(goal);
+	std::stringstream testss{};
+	qc.dump(testss, OpenQASM);
+	std::cout << testss.str() << std::endl;
+	qc.reset();
+	qc.import(testss, OpenQASM);
+	qc.print(std::cout);
+	qc.stripIdleQubits();
+	qc.print(std::cout);
+	std::stringstream actual{};
+	qc.print(actual);
+	EXPECT_EQ(goal.str(), actual.str());
 }

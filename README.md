@@ -8,7 +8,7 @@ A library for the representation of quantum functionality by the [Institute for 
 
 Developers: Lukas Burgholzer, Hartwig Bauer, Stefan Hillmich and Robert Wille.
 
-If you have any questions feel free to contact us using [iic_quantum@jku.at](mailto:iic_quantum@jku.at) or by creating an issue on GitHub.
+If you have any questions feel free to contact us using [iic-quantum@jku.at](mailto:iic-quantum@jku.at) or by creating an issue on GitHub.
 
 ## Usage
 
@@ -20,6 +20,7 @@ The package can be used for a multitude of tasks, as illustrated in the followin
   * `Real` (e.g. from [RevLib](http://revlib.org))
   * `OpenQASM` (e.g. used by [Qiskit](https://github.com/Qiskit/qiskit))
   * `GRCS` Google Random Circuit Sampling Benchmarks (see [GRCS](https://github.com/sboixo/GRCS))
+  * `TFC` (e.g. from [Reversible Logic Synthesis Benchmarks Page](http://webhome.cs.uvic.ca/~dmaslov/mach-read.html))
       
   Importing a circuit from a file in either of those formats is done via:
   ```c++
@@ -84,7 +85,7 @@ The package can be used for a multitude of tasks, as illustrated in the followin
   ``` 
   The matrix representation of the constructed functionality can be printed by calling
   ```c++
-  qft.printMatrix(dd, functionality);
+  qft.printMatrix(dd, functionality, std::cout);
   ```
   which results in the following output
   ```commandline
@@ -102,11 +103,13 @@ The package can be used for a multitude of tasks, as illustrated in the followin
   
   The (much more compact) DD representation that was actually constructed can be visualized as a *\*.dot* file (which is automatically converted to SVG if GraphViz is installed) by calling
   ```c++
-  dd->export2Dot(functionality, "functionality.dot");
+  dd::export2Dot(functionality, "functionality.dot");
   ```
   which produces
   
-  ![](extern/functionality.dot.svg "Functionality")
+  ![](extern/functionality.svg "Functionality")
+  
+  See below for a description of the visualization options and their interpretation.
   
 * **Basic support for DD-based simulation of quantum algorithms.**
  
@@ -122,7 +125,7 @@ The package can be used for a multitude of tasks, as illustrated in the followin
   
     The vector representation of the resulting state vector can be printed by calling
     ```c++
-    grover.printVector(dd, state_vector);
+    grover.printVector(dd, state_vector, std::cout);
   ```
   which results in the following output
   ```commandline
@@ -140,12 +143,12 @@ The package can be used for a multitude of tasks, as illustrated in the followin
     
     The (much more compact) DD representation, that was actually produced by the simulation, can again be visualized as SVG file by calling
    ```c++
-   dd->export2Dot(state_vector, "state_vector.dot", true);
+   dd::export2Dot(state_vector, "state_vector.dot", true);
    ```
                                                                                                
   which produces
   
-  ![](extern/state_vector.dot.svg "State Vector")
+  ![](extern/state_vector.svg "State Vector")
     
 * **Visualization and output of functional representations.**
 
@@ -171,13 +174,18 @@ The package can be used for a multitude of tasks, as illustrated in the followin
     12: 	X   	|	X 	|	
     13: 	X   	X 	|	|	
     14: 	H   	|	H 	|	
-    15: 	H   	H 	|	|	
+    15: 	H   	H 	|	|
+    16: 	X   	|	|	X 	
      o: 		0	1	2	
     ```
 
-    It was already shown above how to visualize the constructed vectors and matrices, as well as the resulting decision diagrams.
-    
-    The library also supports the output of circuits in various formats by calling
+    As already demonstrated above, the function `dd::exportDD(...)` can be used to create visualizations of DDs representing vectors as well as matrices. To this end, the thickness of each edge indicates the edge weight's magnitude, while a color code indicates its phase. We use the HSV color wheel (at 50% lightness and 50% saturation) given below
+  
+  ![](extern/dd_package/extern/hls_colorwheel.svg "Color Wheel")
+  
+  Furthermore, the export function has several options to tune the look and feel of the resulting DDs, e.g., **enabling**/disabling color, enabling/**disabling** edge weights, enabling/**disabling** classic mode. 
+   
+  The library also supports the output of circuits in various formats by calling
     
   ```c++
   std::string filename = "PATH_TO_DESTINATION_FILE.{real | qasm | py}";
@@ -186,9 +194,8 @@ The package can be used for a multitude of tasks, as illustrated in the followin
   
   Currently available file formats are:
         
-    * `Real` (.real)
     * `OpenQASM` (.qasm)
-    * `Qiskit` (.py) Qiskit export generates a python file, which can be used to transpile a respective circuit to a suitable architecture using the Qiskit toolset.
+    * `Qiskit` (.py) Qiskit export generates a python file, which can be used to transpile a respective circuit to a suitable architecture using the Qiskit toolset (specifically Qiskit Terra 0.12.0).
   
 * **Circuit transcription**
 
@@ -197,60 +204,50 @@ The package can be used for a multitude of tasks, as illustrated in the followin
     ```commandline
     qfr_app circuit.real circuit.py
     ```
-    can be used to transcribe a circuit from `real` format to a qiskit realization
+    can be used to transcribe a circuit from `real` format to a Qiskit realization
 
-## System Requirements
+### System Requirements
 
-Building (and running) is continuously tested under Linux (Ubuntu 18.04) using gcc-7.4, gcc-9 and clang-9, MacOS (Mojave 10.14) using AppleClang and gcc-9, and Windows using MSVC 15.9. 
+Building (and running) is continuously tested under Linux (Ubuntu 18.04) using gcc-7.4, gcc-10 and clang-9, MacOS (Mojave 10.15) using AppleClang and gcc-10, and Windows using MSVC 15.9. 
 However, the implementation should be compatible with any current C++ compiler supporting C++14 and a minimum CMake version of 3.10.
 
 It is recommended (although not required) to have [GraphViz](https://www.graphviz.org) installed for visualization purposes.
 
-## Build and Run
-The library (target **qfr**) itself can be built by executing
-```commandline
-mkdir build && cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release
-cmake --build . --config Release --target qfr
-```
+### Configure, Build, and Install
 
-Windows users using Visual Studio and the MSVC compiler need to build the project with
-```commandline
-mkdir build && cd build
-cmake .. -G "Visual Studio 15 2017" -A x64 -DCMAKE_BUILD_TYPE=Release
-cmake --build . --config Release --target qfr
-```
+In order to build the library execute the following in the project's main directory
+1) Configure CMake
+    ```commandline
+    cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+    ```
+   Windows users using Visual Studio and the MSVC compiler may try
+   ```commandline
+   cmake -S . -B build -G "Visual Studio 15 2017" -A x64 -DCMAKE_BUILD_TYPE=Release
+   ```
+   Older CMake versions not supporting the above syntax (< 3.13) may be used with
+   ```commandline
+   mkdir build && cd build
+   cmake .. -DCMAKE_BUILD_TYPE=Release
+   ```
+2) Build the respective target. 
+    ```commandline
+   cmake --build ./build --config Release --target <target>
+   ```
+    The following CMake targets are available
+    - `qfr`: The standalone library
+    - `qfr_example`: A small commandline demo example (*.dot files will be created in the working directory which will be automatically converted to SVG if GraphViz is installed)
+    - `qfr_app`: The commandline transcription executable
+    - `qfr_test`: Unit tests using GoogleTest
 
-To build the library and run a small demo, showcasing the library's features, just build the `qfr_example` CMake target and run the resulting executable (*.dot files will be created in the working directory which will be automatically converted to SVG if GraphViz is installed), i.e.,
+3) Optional: The QFR library and app may be installed on the system by executing
+   
+    ```commandline
+    cmake --build ./build --config Release --target install
+    ```
 
-```commandline
-cmake --build . --config Release --target qfr_example
-cd test
-./qfr_example
-```
-
-The command line application `qfr_app` can be built via the identically named CMake target, i.e., 
-```commandline
-cmake --build . --config Release --target qfr_app
-```
-
-The repository also includes some unit tests (using GoogleTest), which aim to ensure the correct behaviour of the library. They can be built and executed in the following way:
-```commandline
-cmake --build . --config Release --target qfr_test
-ctest -C Release
-```
-
-The QFR library and tool may be installed on the system by executing
-
-```commandline
-$ mkdir build && cd build
-$ cmake .. -DCMAKE_BUILD_TYPE=Release
-$ cmake --build . --config Release --target install
-```
-
-It can then be included in other projects using the following CMake snippet
-
-```cmake
-find_package(qfr)
-target_link_libraries(${TARGET_NAME} PRIVATE JKQ::qfr)
-```
+    It can then also be included in other projects using the following CMake snippet
+    
+    ```cmake
+    find_package(qfr)
+    target_link_libraries(${TARGET_NAME} PRIVATE JKQ::qfr)
+    ```

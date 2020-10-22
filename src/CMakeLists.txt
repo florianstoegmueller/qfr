@@ -20,6 +20,7 @@ add_library(${PROJECT_NAME}
             ${CMAKE_CURRENT_SOURCE_DIR}/operations/NonUnitaryOperation.cpp
 
             ${CMAKE_CURRENT_SOURCE_DIR}/QuantumComputation.cpp
+            ${CMAKE_CURRENT_SOURCE_DIR}/CircuitOptimizer.cpp
 
             ${CMAKE_CURRENT_SOURCE_DIR}/algorithms/QFT.cpp
             ${CMAKE_CURRENT_SOURCE_DIR}/algorithms/Grover.cpp
@@ -38,6 +39,7 @@ add_library(${PROJECT_NAME}
             ${${PROJECT_NAME}_SOURCE_DIR}/include/operations/ClassicControlledOperation.hpp
 
             ${${PROJECT_NAME}_SOURCE_DIR}/include/QuantumComputation.hpp
+            ${${PROJECT_NAME}_SOURCE_DIR}/include/CircuitOptimizer.hpp
 
             ${${PROJECT_NAME}_SOURCE_DIR}/include/algorithms/QFT.hpp
             ${${PROJECT_NAME}_SOURCE_DIR}/include/algorithms/Grover.hpp
@@ -50,7 +52,7 @@ target_include_directories(${PROJECT_NAME} PUBLIC
 target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_14)
 set_target_properties(${PROJECT_NAME} PROPERTIES CXX_EXTENSIONS OFF)
 
-option(TRY_USING_INSTALLED_DD_PACKAGE "Attempt searching for installed version of DD package and use it if found" ON)
+option(TRY_USING_INSTALLED_DD_PACKAGE "Attempt searching for installed version of DD package and use it if found" OFF)
 
 if (TRY_USING_INSTALLED_DD_PACKAGE)
 	find_package(DDpackage QUIET)
