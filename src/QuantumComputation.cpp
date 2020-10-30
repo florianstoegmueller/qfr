@@ -1252,7 +1252,8 @@ namespace qc {
 
 			// call the dynamic reordering routine
 			// currently this performs the reordering after every operation. this may be changed
-			e = dd->dynamicReorder(tmp, varMap, strat);
+			//e = dd->dynamicReorder(tmp, varMap, strat);
+			e = tmp;
 		}
 
 		// change the tracked qubit mapping to the expected output mapping
@@ -1314,7 +1315,8 @@ namespace qc {
 			dd->decRef(e);
 			// call the dynamic reordering routine
 			// currently this performs the reordering after every operation. this may be changed
-			e = dd->dynamicReorder(tmp, varMap, strat);
+			//e = dd->dynamicReorder(tmp, varMap, strat);
+			e = tmp;
 		}
 
 		// change the tracked qubit mapping to the expected output mapping
